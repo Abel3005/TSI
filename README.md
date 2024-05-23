@@ -187,6 +187,8 @@ model.summary()
 - 시간 역시 동일하게 24시간의 주기성을 넣어줌
 - DH 는 MinMaxscaler를 사용하여 scale 해줌
 - 각각의 확률값은 백분율에서 0~1 사이의 값으로 바꿔줌
+- train 데이터와 test 데이터의 지점 데이터가 달라서 STN을 쓰지 않는다.
+
 
 > 불균형 데이터 처리
 <table>
@@ -198,7 +200,19 @@ model.summary()
 
 > 불균형 데이터 처리 정리
 
-<img src="./images/DH에 따른 Pricision 가시화.png" />
+**1. V0의 임계값을 통해 무강수/강수 분류**
 
-- DH 3에서의 확률분포중 가장 큰 값이 V0 인 경우 0으로 체크
-- 나머지 데이터로 학습
+<img src="./images/V0임계값에 따른  Precision 가시화.png" />
+
+**2. 랜덤포레스트 기법을 통하여 무강수/강수 분류**
+```python
+ precision    recall  f1-score   support
+
+       False       0.69      0.45      0.55     45133
+        True       0.90      0.96      0.93    244620
+
+    accuracy                           0.88    289753
+   macro avg       0.80      0.71      0.74    289753
+weighted avg       0.87      0.88      0.87    289753
+```
+**3. DNN을 통해서 무강수/강수 분류**
