@@ -1,0 +1,204 @@
+# TSI (2024년 날씨 빅데이터 컨테스트 공모)
+
+## 수치모델 앙상블을 활용한 강수량 예측
+
+3시간 강수량 확률(앙상블 모델들을 통해서 나온 값)을 사용하여 누적 강수량을 예측
+
+정확한 강수량을 예측하는 회귀 분석 문제가 아닌 강수량의 정도에 따른 구간별 계급을 예측하는 분류분석 문제에 해당
+
+### 데이터 수집
+
+날씨마루에서 제공
+- Rstudio를 통해서 HIVE에서 데이터 다운로드
+    - dbGetQuery(conn, "select * from rainfall_train)
+    - scv.write()
+- CSV 파일로 구글 드라이브로 옮김
+
+
+
+
+### 데이터 분석
+
+ >   변수 파악
+
+**분류 계급 10개** - 강수량이 0.1mm 미만인 경우는 따로 변수 추가 안함
+
+<table>
+<tr><td>v01</td><td>0.1mm 이상 강수</td><td>V02</td><td>0.2mm 이상 강수</td></tr>
+<tr><td>v03</td><td>0.5mm 이상 강수</td><td>V04</td><td>1.0mm 이상 강수</td></tr>
+<tr><td>v05</td><td>2.0mm 이상 강수</td><td>V06</td><td>5.0mm 이상 강수</td></tr>
+<tr><td>v07</td><td>10.0mm 이상 강수</td><td>V08</td><td>20.0mm 이상 강수</td></tr>
+<tr><td>v09</td><td>30.0mm 이상 강수</td><td></td><td></td></tr>
+</table>
+
+---
+
+>   물리적 변수 범주화
+
+<table>
+<tr><td>TM_FC</td><td>DH, TM_EF</td></tr>
+<tr>
+    <td>
+
+#### rainfall_train.fc_year
+- 3년 간의 강수량임을 확인 
+- B년도의 분포가 적은편
+
+#### rainfall_train.fc_month
+- 5-9월 간의 데이터
+
+#### rainfall_train.fc_hour
+- 오전 9시, 오후 9시 발표된 데이터
+
+#### rainfall_train.stn4contest
+- 총 20개 지점
+- 각 지점마다 약 72000개의 데이터
+    </td>
+    <td>
+
+    - DH 3의 배수를 가지며 최대 240읠 값을 가짐
+    
+    - <span style="align:center;font-weight:bold;">TM_EF = TM_FC + DH</span> 
+    
+    - 발표 시각으로 부터 몇시간 떨어져 있는지를 DH 정보가 나타내고 TM_EF는 그것을 반영한 시간입니다.
+    - 발표시간이 12시간 간격임을 고려할 때 TM_EF의 값은 여러개가 됨을 알 수 있습니다.
+    - 이전 발표시각에서 예측한 시간과 다음 발표시간에서 예측한 시간이 겹쳤기 때문입니다.
+    - 그 예측된 시간에 따라서, 실강수량이 제시됩니다.
+    ```python
+    (df.groupby(by=['TM_EF','STN'])['VV'].nunique() > 2).sum()
+    >> 0
+    ```
+    </td>
+</tr>
+<tr><td>(V01 - V09)</td><td>강수계급(classs_interval)</td></tr>
+<tr>
+<td>
+
+- 무 강수를 제외한 누적확률 값으로 int형으로 구성
+- 백분율을 기준으로 표현 되며, 각 단계별 확률을 구하기 위해서는 각 값의 차이 값을 골라야 한다.
+</td>
+<td>
+
+- 10개의 클래스를 가지고 있습니다.
+- 각각의 클래스는 불균형적으로 이루어져 있습니다.
+- 결측치가 존재
+</td>
+</tr>
+
+</table>
+
+### 데이터가 전체적으로 불균형(무강수/강수)
+
+<img src="./images/학습데이터 분포 확인.png" />
+
+>   무강수 데이터 분포 확인
+
+<table>
+<tr><td><img src="./images/지점별 무강수 데이터 분포.png" /></td><td><img src="./images/월별 무강수 데이터 분포.png" /></td></tr>
+<tr><td><img src="./images/시간별 무강수 데이터 분포확인.png" /></td><td><img src="./images/일별 무강수 데이터 분포.png"</td></tr>
+</table>
+
+>  각 클래스 군별로 데이터 분포 확인
+
+<img src="./images/지점별 강수데이터 분포.png" />
+<img src="./images/월별 강수 데이터 분포.png" />
+<img src="./images/시간별 강수 데이터분포.png" />
+<img src="./images/일별 강수 데이터 분포.png" />
+
+
+
+## 모델 
+
+### 모델 검증
+
+>   평가 방법
+
+- 무강수 데이터의 개수: 약 84% 강수 데이터 개수 : 약 156%
+- 'V0'의 크기가 큰  불균형 데이터이므로, class 별 F1 score 확인
+-  $CSI = \frac{H}{H+F+M}$
+
+### Model 1 - max([V0-V9])
+
+>   확률이 가장 높은 값을 클래스로 정하였을 때(:예측 모델: max([V0-V9]))
+
+```python
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import classification_report
+target_name = [f"V{i}"for i in range(10)]
+print(classification_report(df['EF_class'],df['class'],target_names=target_name))
+```
+```python
+              precision    recall  f1-score   support
+
+          V0       0.94      0.88      0.91   1307439
+          V1       0.00      0.05      0.01      2262
+          V2       0.06      0.05      0.05     35990
+          V3       0.04      0.07      0.05     16781
+          V4       0.04      0.10      0.06     13705
+          V5       0.17      0.15      0.16     47267
+          V6       0.09      0.16      0.11     15991
+          V7       0.08      0.19      0.11      8668
+          V8       0.01      0.23      0.01       251
+          V9       0.02      0.30      0.03       408
+
+    accuracy                           0.81   1448762
+   macro avg       0.14      0.22      0.15   1448762
+weighted avg       0.86      0.81      0.83   1448762
+```
+>   DH 영향도 확인
+
+<img src='./images/DH 영향도 확인.png' />
+
+```python
+df.groupby(by=['TM_EF','VV'])['DH'].nunique().describe()
+```
+```python
+count    14737.000000
+mean        18.800163
+std          3.582445
+min          1.000000
+25%         20.000000
+50%         20.000000
+75%         20.000000
+max         20.000000
+Name: DH, dtype: float64
+```
+
+### Model 2 - general DNN
+
+```python
+from tensorflow import keras
+model = keras.Sequential()
+model.add(keras.layers.Dense(30, activation='sigmoid',input_shape=(35,)))
+# model.add(keras.layers.Dropout(0.2))
+model.add(keras.layers.Dense(20, activation='relu',input_shape=(34,)))
+# model.add(keras.layers.Dropout(0.2))
+model.add(keras.layers.Dense(10, activation='softmax'))
+model.summary()
+```
+>   하이퍼 파라미터
+
+- optimizer : adam
+- loss_func : Cross_Entropy
+
+> 데이터 전처리
+
+- 월과 일의 데이터 컬럼을 합쳐서 365일을 기준으로 주기성을 넣어주기 위하여 sin 함수와 cos 함수를 사용하여 전처리
+- 시간 역시 동일하게 24시간의 주기성을 넣어줌
+- DH 는 MinMaxscaler를 사용하여 scale 해줌
+- 각각의 확률값은 백분율에서 0~1 사이의 값으로 바꿔줌
+
+> 불균형 데이터 처리
+<table>
+<tr>
+<td><img src="./images/무강수 추정확률 분포에 따른 무강수 데이터 분포.png" /></td>
+<td><img src="./images/V0임계값에 따른  Precision 가시화.png" /></td>
+</tr>
+</table>
+
+> 불균형 데이터 처리 정리
+
+<img src="./images/DH에 따른 Pricision 가시화.png" />
+
+- DH 3에서의 확률분포중 가장 큰 값이 V0 인 경우 0으로 체크
+- 나머지 데이터로 학습
