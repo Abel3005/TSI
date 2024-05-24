@@ -117,7 +117,9 @@
 - 'V0'의 크기가 큰  불균형 데이터이므로, class 별 F1 score 확인
 -  $CSI = \frac{H}{H+F+M}$
 
-### Model 1 - max([V0-V9])
+### 데이터 전처리
+
+#### max([V0-V9])를 이용한 데이터 분류
 
 >   확률이 가장 높은 값을 클래스로 정하였을 때(:예측 모델: max([V0-V9]))
 
@@ -164,23 +166,6 @@ max         20.000000
 Name: DH, dtype: float64
 ```
 
-### Model 2 - general DNN
-
-```python
-from tensorflow import keras
-model = keras.Sequential()
-model.add(keras.layers.Dense(30, activation='sigmoid',input_shape=(35,)))
-# model.add(keras.layers.Dropout(0.2))
-model.add(keras.layers.Dense(20, activation='relu',input_shape=(34,)))
-# model.add(keras.layers.Dropout(0.2))
-model.add(keras.layers.Dense(10, activation='softmax'))
-model.summary()
-```
->   하이퍼 파라미터
-
-- optimizer : adam
-- loss_func : Cross_Entropy
-
 > 데이터 전처리
 
 - 월과 일의 데이터 컬럼을 합쳐서 365일을 기준으로 주기성을 넣어주기 위하여 sin 함수와 cos 함수를 사용하여 전처리
@@ -215,4 +200,57 @@ model.summary()
    macro avg       0.80      0.71      0.74    289753
 weighted avg       0.87      0.88      0.87    289753
 ```
-**3. DNN을 통해서 무강수/강수 분류**
+
+**3.DNN (가중치 설정)을 통한 분류**
+```python
+from tensorflow import keras
+model = keras.Sequential()
+model.add(keras.layers.Dense(30, activation='sigmoid',input_shape=(14,)))
+model.add(keras.layers.Dense(100, activation='relu',input_shape=(35,)))
+model.add(keras.layers.Dense(20, activation='relu',input_shape=(34,)))
+model.add(keras.layers.Dense(1, activation='sigmoid'))
+```
+>   하이퍼 파라미터
+
+- optimizer : adam
+- loss_func : Cross_Entropy
+
+>   결과
+
+<img src="./images/DNN 강수_무강수.png" />
+
+- 학습 시간이 오래 걸릴 뿐만이 아니라 오래걸림.
+- DNN 보다는 머신러닝과 V0 임계값을 이용하여 데이터 분류하는 방법 사용.
+
+> 머신러닝 분류 결과
+```python
+랜덤포레스트 적용
+전체 데이터 개수: 1448762
+분류된 무강수 데이터 개수: 1241310
+분류된 무강수 중 실제 무강수 데이터 개수: 1213706
+----------------------------------------
+남은데이터중 데이터 무강수 개수: 9609
+남은데이터중 데이터 강수 개수: 197843
+남은데이터중 데이터 비율: 0.048568814666174694
+```
+
+**분류된 데이터 분포**
+
+<table>
+<tr><td>무강수 데이터</td><td></td><td>강수 데이터</td><td></td></tr>
+<tr><td>class</td><td>개수</td><td>class</td><td>개수</td></tr>
+<tr><td>0</td>    <td>1213706</td><td>0</td>    <td>9609</td></tr>
+<tr><td>1</td>    <td>   3790</td><td>1</td>    <td>17772</td></tr>
+<tr><td>2</td>    <td>   5375</td><td>2</td>    <td>28679</td></tr>
+<tr><td>3</td>    <td>   4424</td><td>3</td>    <td>26268</td></tr>
+<tr><td>4</td>    <td>   4229</td><td>4</td>    <td>29198</td></tr>
+<tr><td>5</td>    <td>   4537</td><td>5</td>    <td>36870</td></tr>
+<tr><td>6</td>    <td>   2528</td><td>6</td>    <td>25436</td></tr>
+<tr><td>7</td>    <td>   1671</td><td>7</td>    <td>19497</td></tr>
+<tr><td>8</td>    <td>    610</td><td>8</td>    <td>7577</td></tr>
+<tr><td>9</td>    <td>    440</td><td>9</td>    <td>6546</td></tr>
+</table>
+
+## 모델 학습
+
+### LSTM
