@@ -113,7 +113,7 @@
 
 >   평가 방법
 
-- 무강수 데이터의 개수: 약 84% 강수 데이터 개수 : 약 156%
+- 무강수 데이터의 개수: 약 84% 강수 데이터 개수 : 약 16%
 - 'V0'의 크기가 큰  불균형 데이터이므로, class 별 F1 score 확인
 -  $CSI = \frac{H}{H+F+M}$
 
@@ -191,7 +191,7 @@ Name: DH, dtype: float64
 
 **2. 랜덤포레스트 기법을 통하여 무강수/강수 분류**
 ```python
- precision    recall  f1-score   support
+                precision   recall    f1-score support
 
        False       0.69      0.45      0.55     45133
         True       0.90      0.96      0.93    244620
