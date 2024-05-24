@@ -254,3 +254,18 @@ model.add(keras.layers.Dense(1, activation='sigmoid'))
 ## 모델 학습
 
 ### LSTM
+
+> 강수로 판별된 데이터 학습 모델
+
+```python
+model = Sequential()
+model.add(LSTM(25, input_shape=(x.shape[1],x.shape[2])))
+model.add(Dense(10, activation="softmax"))
+```
+
+> 처리 결과
+
+```python
+CSI: 0.997524
+```
+> 전체 데이터에 대해서 점수
