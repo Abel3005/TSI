@@ -1,4 +1,37 @@
 import numpy as np
+import pandas as pd
+from sklearn.preprocessing import MinMaxScaler
+
+def preprocessing_daegun(csvfile='rainfall_train.csv'):
+    rainfall_train = pd.read_csv(csvfile)
+    rainfall_train.drop(columns=['Unnamed: 0'],inplace= True)
+
+    df = pd.concat([pd.read_csv('daegun_first.csv'),rainfall_train[['rainfall_train.dh','rainfall_train.ef_month','rainfall_train.ef_day','rainfall_train.ef_hour','rainfall_train.ef_year']]],axis=1)
+    df = df.drop(columns=['TM_FC','TM_EF','EF_class'])
+    null_df = df[df['class'] == -999]
+    df = df[df['class'] != -999]
+
+    month_to_day = [31,28,31,30,31,30,31,31,30,31,30,31]
+    for i in range(1,12):
+        month_to_day[i] += month_to_day[i-1] 
+    month_to_day = {idx+2 : i for idx, i in enumerate(month_to_day)}
+    month_to_day[1] = 0
+    df['day'] = df['rainfall_train.ef_month'].apply(lambda x: month_to_day[x]) + df['rainfall_train.ef_day']
+    df['day_sin'] = np.sin(2*np.pi*df['rainfall_train.ef_month'].apply(lambda x: month_to_day[x]) + df['rainfall_train.ef_day']/365)
+    df['day_cos'] = np.cos(2*np.pi*df['rainfall_train.ef_month'].apply(lambda x: month_to_day[x]) + df['rainfall_train.ef_day']/365)
+    df =df.drop(columns=['rainfall_train.ef_month','rainfall_train.ef_day'])
+
+    df['hour_sin'] = np.sin(2 *np.pi * df['rainfall_train.ef_hour'] /24)
+    df['hour_cos'] = np.cos(2 *np.pi * df['rainfall_train.ef_hour'] /24)
+    df = df.drop(columns=['rainfall_train.dh'])
+
+
+    scaler = MinMaxScaler()
+    scaler.fit(df[['DH']])
+    df[['DH']]=scaler.transform(df[['DH']])
+    df[[f"V{i}" for i in range(1,10)]] = df[[f"V{i}" for i in range(1,10)]] / 100
+    return df
+
 
 def compute_csi(y_pred,y_true):
     # compute csi

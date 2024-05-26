@@ -16,7 +16,6 @@
 
 
 
-
 ### 데이터 분석
 
  >   변수 파악
@@ -84,12 +83,25 @@
 - 결측치가 존재
 </td>
 </tr>
-
 </table>
+
+## 실제 훈련 데이터와 테스트 데이터 범위가 다름
+- 지점(STN)과 연도(Year)의 범위가 다름
+
+>   지점(STN)별 데이터 분포
+
+<img src="./images/지점별 강수데이터 분포.png" />
+
+>   연도별(Year)별 데이터 분포
+
+<img src="./images/년도별 실강수량 평균 가시화.png" />
+
 
 ### 데이터가 전체적으로 불균형(무강수/강수)
 
 <img src="./images/학습데이터 분포 확인.png" />
+
+
 
 >   무강수 데이터 분포 확인
 
@@ -100,7 +112,6 @@
 
 >  각 클래스 군별로 데이터 분포 확인
 
-<img src="./images/지점별 강수데이터 분포.png" />
 <img src="./images/월별 강수 데이터 분포.png" />
 <img src="./images/시간별 강수 데이터분포.png" />
 <img src="./images/일별 강수 데이터 분포.png" />
@@ -190,6 +201,18 @@ Name: DH, dtype: float64
 <img src="./images/V0임계값에 따른  Precision 가시화.png" />
 
 **2. 랜덤포레스트 기법을 통하여 무강수/강수 분류**
+>   독립변수
+- DH
+- V1-9
+- hour: sin, cos
+- day: sin, cos
+
+>   종속변수
+- class : 강수계급
+- VV : 실 강수량
+
+>   분류 결과
+
 ```python
                 precision   recall    f1-score support
 
@@ -251,11 +274,23 @@ model.add(keras.layers.Dense(1, activation='sigmoid'))
 <tr><td>9</td>    <td>    440</td><td>9</td>    <td>6546</td></tr>
 </table>
 
-## 모델 학습
+## 강수 클래스 구분 모델 학습
 
-### LSTM
+### Random Forest
 
-> 강수로 판별된 데이터 학습 모델
+- 최적의 n_estimator 60으로 결정
+
+> A년도 dh = 0인 데이터에 대한 모델 평가
+<img src="./images/변수 영향도 결정을 위한 모델 성능 수치 가시화.png" />
+
+> dh = 0인 강수 데이터에 대해서 성능 평가
+<img src="./images/(모든년도)변수 영향도 결정을 위한 모델 성능 수치 가시화.png" />
+
+>   강수데이터에 대해서 Random Forest 성능 평가 
+<img src="./images/최적의 RandomForeset.png" />
+
+
+### SIMPLE LSTM
 
 ```python
 model = Sequential()
@@ -263,9 +298,166 @@ model.add(LSTM(25, input_shape=(x.shape[1],x.shape[2])))
 model.add(Dense(10, activation="softmax"))
 ```
 
-> 처리 결과
+> 학습 결과
+
+<img src="./images/lstm 학습 그래프.png" />
+
+정확도,CSI 가 낮은 지점에서 수렴
+```python
+CSI : 0.19572919428309754
+```
+### DSTM_ Data_distibuted LSTM Model
+
+**train/test set 분리**
+
+- 시계열 데이터의 특성상 랜덤하게 데이터를 나누는 것이 아닌 시간 순서에 따라 데이터를 구분하는 것이 필요
+- B년도의 데이터를 test 데이터를 사용하는 방법 
+
+**시계열로 데이터를 분석**
+
+- 시계열적으로 데이터를 분석하기 위해서 2가지 변수에 따라 집계할 수 있도록 모델 설계
+- STN, DH(TM_FC)
+
+>   모델 구조
+- DH 처리 : DNN
+    - DH 최대 개수 : 20
+    - 20* (feature 개수)로 데이터 형식을 맞춤
+    - 각 열에 대해서 1D convolution 진행
+    - 1차원으로 flatten()
+- STN종류대로 시계열 데이터 셋 생성
+    - STN의 종류대로 데이터를 묶음
+        - 각 STN에 따라서 시간순으로 정렬된 데이터 묶음이 생성
+        - STN의 개수가 20개이면 20개의 데이터 묶음이 생성된다.
+    - 위에서 생성된 데이터 묶음을 timestep을 기준으로 묶습니다.
+
+- 샘플 데이터 형식
+    - DH에 따라서 구분된 데이터 : (20 * 14)
+    - timestep으로 데이터를 묶음 : (5* 20 * 14)
+
+**Default DSTM**
+>   모델 구조
+```python
+def dstm_model(timestep=5):
+    input_X = keras.layers.Input((timestep,20,14))
+    process_channel = []
+    for i in range(14):
+        # None, timestep, 20
+        channel_slice = input_X[:,:,:,i]
+        process_timestep = []
+        for j in range(timestep):
+            #None, 20
+            process = keras.layers.Dense(5,activation="sigmoid",input_shape=(20,))(channel_slice[:,j,:])
+            process = keras.layers.Dense(3,activation="sigmoid",input_shape=(20,))(process)
+            process_timestep.append(process)
+        # (5,3)
+        process_timestep = keras.layers.Concatenate()(process_timestep)
+        process_channel.append(keras.layers.Reshape((timestep,3))(process_timestep))
+    #(timestep,)
+    X = keras.layers.Concatenate(axis=-1)(process_channel)
+    X = keras.layers.Dense(30, activation="relu")(X)
+    X = keras.layers.Dense(15, activation="relu")(X)
+    X = keras.layers.Dense(10, activation="sigmoid")(X)
+    X = keras.layers.LSTM(10,input_shape=(5,14*3))(X)
+    X = keras.layers.Dense(10, activation="softmax")(X)
+
+    lmodel = keras.Model(inputs=input_X, outputs=X)
+    return lmodel
+```
+> 학습결과
+
+<img src="./images/LSTM_first.png" />
+
+- 모델이 local optima에 수렴한 것을 볼 수 있음
+
+**DSTM (LSTM 전 Dense Layer 추가)**
 
 ```python
-CSI: 0.997524
+def dstm_model(timestep=5):
+    input_X = keras.layers.Input((timestep,20,14))
+    process_channel = []
+    for i in range(14):
+        # None, timestep, 20
+        channel_slice = input_X[:,:,:,i]
+        process_timestep = []
+        for j in range(timestep):
+            #None, 20
+            process = keras.layers.Dense(5,activation="sigmoid",input_shape=(20,))(channel_slice[:,j,:])
+            process = keras.layers.Dense(3,activation="sigmoid",input_shape=(20,))(process)
+            process_timestep.append(process)
+        # (5,3)
+        process_timestep = keras.layers.Concatenate()(process_timestep)
+        process_channel.append(keras.layers.Reshape((timestep,3))(process_timestep))
+    #(timestep,)
+    X = keras.layers.Concatenate(axis=-1)(process_channel)
+    curr_procssing = []
+    for i in range(timestep):
+        curr = X[:,i,:]
+        # (42,)
+        curr = keras.layers.Dense(100, activation="tanh")(curr)
+        curr = keras.layers.Dropout(0.2)(curr)
+        curr = keras.layers.Dense(50, activation="relu")(curr)
+        curr = keras.layers.Dropout(0.2)(curr)
+        curr = keras.layers.Dense(24, activation="relu")(curr)
+        curr = keras.layers.BatchNormalization()(curr)
+        curr = keras.layers.Dense(12, activation="relu")(curr)
+        curr_procssing.append(curr)
+    X = keras.layers.Concatenate()(curr_procssing)
+    X = keras.layers.Reshape((timestep,12))(X)
+    X = keras.layers.LSTM(15,input_shape=(5,12))(X)
+    X = keras.layers.Dense(10, activation="softmax")(X)
+
+    lmodel = keras.Model(inputs=input_X, outputs=X)
+    return lmodel
 ```
+>   학습결과
+
+<img src="./images/second_DSTM.png" />
+
+- 이전보다 깊이 내려가지만 기울기가 급격히 내려가는 구간이 존재한다.
+- 검증데이터는 이전과 별반 차이가 없다.
+
+**DSTM : Return_Sequence 추가하여 LSTM layer 추가**
+
+
+
+
+```python
+def dstm_model(timestep=5):
+    input_X = keras.layers.Input((timestep,20,14))
+    process_channel = []
+    for i in range(14):
+        # None, timestep, 20
+        channel_slice = input_X[:,:,:,i]
+        process_timestep = []
+        for j in range(timestep):
+            #None, 20
+            process = keras.layers.Dense(10,activation="sigmoid",input_shape=(20,))(channel_slice[:,j,:])
+            process = keras.layers.Dense(5,activation="relu",input_shape=(50,))(process)
+            process = keras.layers.Dense(3,activation="sigmoid",input_shape=(20,))(process)
+            process_timestep.append(process)
+        # (5,3)
+        process_timestep = keras.layers.Concatenate()(process_timestep)
+        process_channel.append(keras.layers.Reshape((timestep,3))(process_timestep))
+    #(timestep,)
+    X = keras.layers.Concatenate(axis=-1)(process_channel)
+    X = keras.layers.Dense(30, activation="relu")(X)
+    X = keras.layers.Dense(15, activation="relu")(X)
+    X = keras.layers.LSTM(15,input_shape=(5,14*3))(X)
+    X = keras.layers.Dense(10, activation="softmax")(X)
+
+    lmodel = keras.Model(inputs=input_X, outputs=X)
+    return lmodel
+```
+> 학습
+
+- Optimizer : RMSprop, learning_rate : 0.0001
+- 강수 데이터에 대해서 가중치를 높임 (무강수:강수 = 1:10)
+
+
+>   변수 영향도 파악 모델
+
+
+
+
+
 > 전체 데이터에 대해서 점수
