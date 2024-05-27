@@ -1,21 +1,36 @@
 from tqdm import tqdm
 import numpy as np
+import tensorflow as tf
 from tensorflow import keras
 from pykalman import KalmanFilter
-
+from sklearn.ensemble import RandomForestRegressor
+import talib
 
 def dstm_model(timestep=5):
-    input_X = keras.layers.Input((timestep,20,14))
+    input_X = keras.layers.Input((timestep,20,16))
+    input_X1 = input_X[:,:,:,0:14]
+    input_X2 = input_X[:,:,:,14]
+    input_X3 = input_X[:,:,:,15]
+
+
     # None, timestep, 20, 14
     channel_process = []
     for i in range(timestep):
-        channel_ = input_X[:,i,:,:] 
-        channel_=keras.layers.LSTM(10,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,14))(channel_)
+        channel_ = input_X1[:,i,:,:] 
+        channel_=keras.layers.LSTM(10,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,16))(channel_)
+        channel_ = keras.layers.Dropout(0.2)(channel_)
         channel_=keras.layers.LSTM(10,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,10))(channel_)
+        channel_ = keras.layers.BatchNormalization()(channel_)
         channel_=keras.layers.LSTM(10,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,10))(channel_)
+        channel_ = keras.layers.Dropout(0.2)(channel_)
         channel_=keras.layers.LSTM(10, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,10))(channel_)
+        channel_ = keras.layers.BatchNormalization()(channel_)
         #output = None,1,10
         channel_process.append(channel_)
+    X1 = keras.layers.Lambda(lambda x: tf.reduce_mean(x, axis=-1))(input_X2)
+    X1 =keras.layers.Lambda(lambda x: tf.reduce_mean(x, axis=-1))(X1)
+    X2 =keras.layers.Lambda(lambda x: tf.reduce_mean(x, axis=-1))(input_X3)
+    X2 =keras.layers.Lambda(lambda x: tf.reduce_mean(x, axis=-1))(X2)
  
     #(timestep,)
     X = keras.layers.Concatenate()(channel_process)
@@ -29,17 +44,83 @@ def dstm_model(timestep=5):
     X = keras.layers.Dropout(0.2)(X)
     X = keras.layers.LSTM(50,recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,50))(X)
     X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.Dense(30, activation="relu")(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.Dense(15, activation="relu")(X)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.Dense(10, activation="relu")(X)
+    X = keras.layers.BatchNormalization()(X)
+    X1 =keras.layers.Reshape((1,))(X1)
+    print(X1.shape)
+    X2 =keras.layers.Reshape((1,))(X2)
+    X = keras.layers.Concatenate(axis=-1)([X,X1,X2])
     X = keras.layers.Dense(10, activation="softmax")(X)
 
     lmodel = keras.Model(inputs=input_X, outputs=X)
     return lmodel
 
+def fstm_model(timestep=5):
+    #(None,Timestep,26)
+    input_X = keras.layers.Input((timestep,16))
+    input_X1 = input_X[:,:,0:14]
+    input_X2 = input_X[:,-1,14]
+    input_X3 = input_X[:,-1,15]
+    X2 = keras.layers.Reshape((1,))(input_X2)
+    X3 = keras.layers.Reshape((1,))(input_X3)
+    # None, timestep, 20, 14
+    X = keras.layers.LSTM(70,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,14))(input_X1)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.LSTM(70,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,70))(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.LSTM(70,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,70))(X)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.LSTM(70, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,70))(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.Concatenate()([X,X2,X3])
+    X = keras.layers.Dense(10, activation="softmax")(X)
+    lmodel = keras.Model(inputs=input_X, outputs=X)
+    return lmodel
 
+def create_fstm_data_set(df,timestep=5):
+    X = []
+    Y = []
+    df['list'] = df.sort_values(by=['DH']).drop(columns=['VV','STN','V0','rainfall_train.ef_year','day','rainfall_train.ef_hour','class']).apply(lambda x: np.array(x),axis=1)
+    sample_weights = 1-df['class'].value_counts(normalize=True).values
+    for i in tqdm(range(1,21)):
+        stn_df = df[df["STN"] == f"STN0{'%02d' % i}"].copy()
+        tmp2 = np.array(list(stn_df.groupby(by=['rainfall_train.ef_year','day','rainfall_train.ef_hour'])['list'].apply(lambda x: x.iloc[0]).values))
+        y_tmp = stn_df.groupby(by=['rainfall_train.ef_year','day','rainfall_train.ef_hour'])['class'].mean().values.astype(int)
+        Y.extend(y_tmp)
+        tmp3 = tmp2
+        # tmp3 = np.hstack([tmp2,talib.SMA(tmp2[:,14],timeperiod=5).reshape(-1,1)])
+        # tmp3 = np.hstack([tmp3,talib.SMA(tmp2[:,14],timeperiod=10).reshape(-1,1)])
+        # tmp3 = np.hstack([tmp3,talib.SMA(tmp2[:,15],timeperiod=5).reshape(-1,1)])
+        # tmp3 = np.hstack([tmp3,talib.SMA(tmp2[:,15],timeperiod=10).reshape(-1,1)])
+        # tmp3 = np.hstack([tmp3,talib.SMA(talib.STDDEV(tmp2[:,14]), timeperiod=5).reshape(-1,1)])
+        # tmp3 = np.hstack([tmp3,talib.SMA(talib.STDDEV(tmp2[:,14]), timeperiod=10).reshape(-1,1)])
+        # tmp3 = np.hstack([tmp3,talib.SMA(talib.STDDEV(tmp2[:,15]), timeperiod=5).reshape(-1,1)])
+        # tmp3 = np.hstack([tmp3,talib.SMA(talib.STDDEV(tmp2[:,15]), timeperiod=10).reshape(-1,1)])
+        #macd,_,_ =talib.MACD(tmp2[:,14], fastperiod=12, slowperiod=26, signalperiod=9)
+        #tmp3 = np.hstack([tmp3,macd.reshape(-1,1)])
+        #macd,_,_ =talib.MACD(tmp2[:,15], fastperiod=12, slowperiod=26, signalperiod=9)
+        #tmp3 = np.hstack([tmp3,macd.reshape(-1,1)])
+        m = len(tmp3) - timestep
+        tmp4 = []
+        for i in range(timestep):
+            s = np.array(tmp3[0:i+1])
+            tmp4.append(np.vstack([s,np.repeat(tmp3[i].reshape(1,16), timestep - (i+1), axis=0)]))
+        for i in range(m):
+            tmp4.append(np.array(tmp3[i:i+timestep]))
+        X.extend(tmp4)
+    Y = np.array(Y)
+    sample_weights = sample_weights[Y]*10
+    return np.array(X),Y,sample_weights
 
-def create_dstm_data_set(df,timestep=5, sample_weight=False):
+def create_dstm_data_set(df,timestep=5):
     X = []
     Y = []
     df['list'] = df.drop(columns=['VV','STN','V0','rainfall_train.ef_year','day','rainfall_train.ef_hour','class']).apply(lambda x: np.array(x),axis=1)
+    sample_weights = 1-df['class'].value_counts(normalize=True).values
     for i in tqdm(range(1,21)):
         stn_df = df[df["STN"] == f"STN0{'%02d' % i}"].copy()
         tmp2 = stn_df.groupby(by=['rainfall_train.ef_year','day','rainfall_train.ef_hour'])['list'].apply(list).values
@@ -62,14 +143,13 @@ def create_dstm_data_set(df,timestep=5, sample_weight=False):
         tmp4 = []
         for i in range(timestep):
             s = np.array(tmp3[0:i+1])
-            tmp4.append(np.vstack([s,np.repeat(tmp3[i].reshape(1,20,14), timestep - (i+1), axis=0)]))
+            tmp4.append(np.vstack([s,np.repeat(tmp3[i].reshape(1,20,16), timestep - (i+1), axis=0)]))
         for i in range(m):
             tmp4.append(np.array(tmp3[i:i+timestep]))
         X.extend(tmp4)
-    sample_weights = np.ones(len(Y))
-    if sample_weight:
-        sample_weights[Y !=0] = 3
-    return np.array(X),np.array(Y),sample_weights
+    Y = np.array(Y)
+    sample_weights = sample_weights[Y]*10
+    return np.array(X),Y,sample_weights
 
 
 import pandas as pd
@@ -148,12 +228,6 @@ def create_all_data_set():
         df[f'{var}_kalman'] = state_means.flatten()
     return df
 
-
-
-
-
-
-
 def data_sampling(df):
     #데이터 샘플링 관련
     # 데이터 언더샘플링
@@ -166,5 +240,7 @@ def data_sampling(df):
     # 언더샘플링된 데이터와 나머지 데이터를 결합
     df_balanced = pd.concat([df_class_0_under, df_class_non_0])
 
-
-
+from util import preprocessing_daegun
+if __name__ == "__main__":
+    df = preprocessing_daegun
+    X,Y, sample_weigts= create_fstm_data_set(df)

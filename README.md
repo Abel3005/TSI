@@ -322,7 +322,7 @@ CSI : 0.19572919428309754
 - DH 처리 : DNN
     - DH 최대 개수 : 20
     - 20* (feature 개수)로 데이터 형식을 맞춤
-    - 각 열에 대해서 1D convolution 진행
+    - 각 열에 대해서 DNN, LSTM 등으로 feature 생성
     - 1차원으로 flatten()
 - STN종류대로 시계열 데이터 셋 생성
     - STN의 종류대로 데이터를 묶음
@@ -510,26 +510,133 @@ def dstm_model(timestep=5):
     return lmodel
 ```
 >   학습결과
-
-<img src="./images/D(L)STM_First.png" />
+<table>
+<tr>
+<td><img src="./images/D(L)STM_First.png" /></td>
+<td><img src="./images/D(L)STM second.png" /><td>
+</tr>
+</table>
 
 - validation의 변동이 진동됨을 볼 수 있음.
 - loss가 0.5 수준에서 과적합이 진행된다고 생각
-- 좀 더 모델을 돌려볼 필요 있음
 
-**무강수/강수 분류모델을 통해서 데이터 추가하는 방식**
+### RBPLSTM: 무강수/강수 분류모델을 통해서 데이터 추가하는 방식
+- 회귀모델: Randomforest(n_estimator=60 ,random_state=42) 
+    - 독립변수: V1-9, DH, hour(sin),hour(cos),day(cos),day(sin)
+    - 종속변수: VV
+- 분류모델: Randomforest(n_estimator=60, random_state=42)
+    - 독립변수: V1-9, DH, hour(sin),hour(cos),day(cos),day(sin)
+    - 종속변수 : class
+- class별로 데이터 분포에 따른 weight 줌
+
+<table>
+<tr><td style="font-weight:bold">머신러닝 알고리즘 성능</td></tr>
+<tr>
+<td>
+
+    실 강수 데이터
+    mean_absolute_error: 1.629823192725517
+    mean_squared_error : 25.65344261132864
+
+</td>
+<td>
+
+                precision    recall  f1-score   support
+       False       0.63      0.33      0.43     90625
+        True       0.86      0.96      0.91    395311
+    accuracy                           0.84    485936
+    macro avg       0.75      0.64      0.67    485936
+    weighted avg       0.82      0.84      0.82    485936
+
+</td>
+</tr>
+</table>
+
+- 무강수/강수(분류모델을 통해서 나온 결과) 확률 추가
+- Dense Latyer 층에서 실강수량(분류모델을 통해서 나온 결과) 평균 추가
+
+>   학습 결과
+
+<table>
+<tr><td><img src="./images/RBPSTM_csi.png" /></td>
+<td><img src="./images/RBPSTM_accuracy.png" /></td>
+<td><img src="./images/RBPSTM_loss.png" /></td></tr>
+</table>
+
+**Dense 층에 머신러닝 결과를 적용**
+
+>   모델 구조
+```python
+def dstm_model(timestep=5):
+    input_X = keras.layers.Input((timestep,20,16))
+    input_X1 = input_X[:,:,:,0:14]
+    input_X2 = input_X[:,:,:,14]
+    input_X3 = input_X[:,:,:,15]
+
+
+    # None, timestep, 20, 14
+    channel_process = []
+    for i in range(timestep):
+        channel_ = input_X1[:,i,:,:] 
+        channel_=keras.layers.LSTM(10,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,16))(channel_)
+        channel_ = keras.layers.Dropout(0.2)(channel_)
+        channel_=keras.layers.LSTM(10,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,10))(channel_)
+        channel_ = keras.layers.BatchNormalization()(channel_)
+        channel_=keras.layers.LSTM(10,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,10))(channel_)
+        channel_ = keras.layers.Dropout(0.2)(channel_)
+        channel_=keras.layers.LSTM(10, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,10))(channel_)
+        channel_ = keras.layers.BatchNormalization()(channel_)
+        #output = None,1,10
+        channel_process.append(channel_)
+    X1 = keras.layers.Lambda(lambda x: tf.reduce_mean(x, axis=-1))(input_X2)
+    X1 =keras.layers.Lambda(lambda x: tf.reduce_mean(x, axis=-1))(X1)
+    X2 =keras.layers.Lambda(lambda x: tf.reduce_mean(x, axis=-1))(input_X3)
+    X2 =keras.layers.Lambda(lambda x: tf.reduce_mean(x, axis=-1))(X2)
+ 
+    #(timestep,)
+    X = keras.layers.Concatenate()(channel_process)
+    X = keras.layers.Reshape((timestep,10))(X)
+    # None, timestep, 10
+    X = keras.layers.LSTM(50, return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,10))(X)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.LSTM(50, return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,50))(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.LSTM(50, return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,50))(X)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.LSTM(50,recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,50))(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.Dense(30, activation="relu")(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.Dense(15, activation="relu")(X)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.Dense(10, activation="relu")(X)
+    X = keras.layers.BatchNormalization()(X)
+    X1 =keras.layers.Reshape((1,))(X1)
+    print(X1.shape)
+    X2 =keras.layers.Reshape((1,))(X2)
+    X = keras.layers.Concatenate(axis=-1)([X,X1,X2])
+    X = keras.layers.Dense(10, activation="softmax")(X)
+
+    lmodel = keras.Model(inputs=input_X, outputs=X)
+    return lmodel
+```
+> 학습결과
+
+<table>
+<tr><td><img src="./images/Dense_ML_first.png" /></td><td><img src="./images/Dense_ML_second_accuracy.png" /></td></tr>
+<tr><td><img src="./images/Dense_ML_first_csi.png" /></td><td><img src="./images/Dense_ML_second_csi.png" /></td></tr>
+<tr><td><img src="./images/Dense_ML_first_loss.png" /></td><td><img src="./images/Dense_ML_first_loss.png" /></td></tr>
+</table>
+
+- 학습이
 
 ### FSTM_ Fast Data LSTM Model
-- 기술 지표를 넣기 위해서 각 시간당 하나의 데이터를 미리 선별
+- 시간당 하나의 데이터를 선별
 - 해당 시간 중 가장 dh가 작은 데이터를 사용
 
 <img src="./images/DH 영향도 확인.png" />
 
 DH가 작을수록 데이터의 신뢰성이 높아진다는 것을 가설로 함.
-
-
-
-
 
 ```python
 def dstm_model(timestep=5):
@@ -558,7 +665,46 @@ def dstm_model(timestep=5):
     lmodel = keras.Model(inputs=input_X, outputs=X)
     return lmodel
 ```
-> 학습
+> 학습 결과
+
+<table>
+<tr><td><img src="./images/fstm_first_accuracy.png" /></td>
+<td><img src="./images/fstm_first_csi.png" /></td>
+<td><img src="./images/fstm_first_loss.png" /></td></tr>
+</table>
+
+**머신러닝 결과 후처리**
+
+>   모델 구조
+
+```python
+def fstm_model(timestep=5):
+    #(None,Timestep,26)
+    input_X = keras.layers.Input((timestep,16))
+    input_X1 = input_X[:,:,0:14]
+    input_X2 = input_X[:,-1,14]
+    input_X3 = input_X[:,-1,15]
+    X2 = keras.layers.Reshape((1,))(input_X2)
+    X3 = keras.layers.Reshape((1,))(input_X3)
+    # None, timestep, 20, 14
+    X = keras.layers.LSTM(70,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,14))(input_X1)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.LSTM(70,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,70))(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.LSTM(70,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,70))(X)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.LSTM(70, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,70))(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.Concatenate()([X,X2,X3])
+    X = keras.layers.Dense(10, activation="softmax")(X)
+    lmodel = keras.Model(inputs=input_X, outputs=X)
+    return lmodel
+```
+
+
+### ASTM Attention LSTM
+
+
 
 - Optimizer : RMSprop, learning_rate : 0.0001
 - 강수 데이터에 대해서 가중치를 높임 (무강수:강수 = 1:10)

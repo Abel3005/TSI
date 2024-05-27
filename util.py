@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.linear_model import LogisticRegression
+import pickle
 
 def preprocessing_daegun(csvfile='rainfall_train.csv'):
     rainfall_train = pd.read_csv(csvfile)
@@ -30,6 +32,17 @@ def preprocessing_daegun(csvfile='rainfall_train.csv'):
     scaler.fit(df[['DH']])
     df[['DH']]=scaler.transform(df[['DH']])
     df[[f"V{i}" for i in range(1,10)]] = df[[f"V{i}" for i in range(1,10)]] / 100
+
+    #model
+    with open('binary_classification.pkl','rb') as f:
+        bmodel = pickle.load(f)
+    with open('regression_random.pkl','rb') as f:
+        rmodel = pickle.load(f)
+    x = df.drop(columns=['STN','V0','rainfall_train.ef_year','day','rainfall_train.ef_hour','class','VV'])
+    yr = rmodel.predict(x)
+    yc = bmodel.predict(x)
+    df['RP'] = yr.astype(float)
+    df['BP'] = yc.astype(float)
     return df
 
 
