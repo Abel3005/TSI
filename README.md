@@ -306,7 +306,7 @@ model.add(Dense(10, activation="softmax"))
 ```python
 CSI : 0.19572919428309754
 ```
-### DSTM_ Data_distibuted LSTM Model
+### DSTM_ DNN_distibuted LSTM Model
 
 **train/test set 분리**
 
@@ -417,6 +417,116 @@ def dstm_model(timestep=5):
 - 검증데이터는 이전과 별반 차이가 없다.
 
 **DSTM : Return_Sequence 추가하여 LSTM layer 추가**
+>   모델 구조
+
+```python
+def dstm_model(timestep=5):
+    input_X = keras.layers.Input((timestep,20,14))
+    process_channel = []
+    for i in range(14):
+        # None, timestep, 20
+        channel_slice = input_X[:,:,:,i]
+        process_timestep = []
+        for j in range(timestep):
+            #None, 20
+            process = keras.layers.Dense(5,activation="sigmoid",input_shape=(20,))(channel_slice[:,j,:])
+            process = keras.layers.Dense(3,activation="sigmoid",input_shape=(20,))(process)
+            process_timestep.append(process)
+        # (5,3)
+        process_timestep = keras.layers.Concatenate()(process_timestep)
+        process_channel.append(keras.layers.Reshape((timestep,3))(process_timestep))
+    #(timestep,)
+    X = keras.layers.Concatenate(axis=-1)(process_channel)
+    curr_procssing = []
+    for i in range(timestep):
+        curr = X[:,i,:]
+        # (42,)
+        curr = keras.layers.Dense(100, activation="tanh")(curr)
+        curr = keras.layers.Dropout(0.2)(curr)
+        curr = keras.layers.Dense(50, activation="relu")(curr)
+        curr = keras.layers.Dropout(0.2)(curr)
+        curr = keras.layers.Dense(24, activation="relu")(curr)
+        curr = keras.layers.BatchNormalization()(curr)
+        curr = keras.layers.Dense(12, activation="relu")(curr)
+        curr_procssing.append(curr)
+    X = keras.layers.Concatenate()(curr_procssing)
+    X = keras.layers.Reshape((timestep,12))(X)
+    X = keras.layers.LSTM(50, return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(5,12))(X)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.LSTM(50, return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(5,12))(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.LSTM(50, return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(5,12))(X)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.LSTM(50,recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(5,12))(X)
+    X = keras.layers.BatchNormalization()(X)
+
+    X = keras.layers.Dense(10, activation="softmax")(X)
+
+    lmodel = keras.Model(inputs=input_X, outputs=X)
+    return lmodel
+```
+
+>   학습 결과
+<table><tr><td>
+<img src="./images/third_lstm.png" />
+</td><td><img src="./images/가중치 다르게 한 third_dstm.png" /></td></tr>
+</table>
+
+- 성능이 낮은 위치에서 기울기가 낮아지는 수렴증상을 보임
+- 학습을 더 돌려봤을 때, Valid, Train 모두 수렴하는 것으로 나타남
+
+**D(L)STM: LSTM_LSTM 모델**
+
+>   모델 구조
+
+```python
+def dstm_model(timestep=5):
+    input_X = keras.layers.Input((timestep,20,14))
+    # None, timestep, 20, 14
+    channel_process = []
+    for i in range(timestep):
+        channel_ = input_X[:,i,:,:] 
+        channel_=keras.layers.LSTM(10,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,14))(channel_)
+        channel_=keras.layers.LSTM(10,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,10))(channel_)
+        channel_=keras.layers.LSTM(10,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,10))(channel_)
+        channel_=keras.layers.LSTM(10, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,10))(channel_)
+        #output = None,1,10
+        channel_process.append(channel_)
+ 
+    #(timestep,)
+    X = keras.layers.Concatenate()(channel_process)
+    X = keras.layers.Reshape((timestep,10))(X)
+    # None, timestep, 10
+    X = keras.layers.LSTM(50, return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,10))(X)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.LSTM(50, return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,50))(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.LSTM(50, return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,50))(X)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.LSTM(50,recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,50))(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.Dense(10, activation="softmax")(X)
+    lmodel = keras.Model(inputs=input_X, outputs=X)
+    return lmodel
+```
+>   학습결과
+
+<img src="./images/D(L)STM_First.png" />
+
+- validation의 변동이 진동됨을 볼 수 있음.
+- loss가 0.5 수준에서 과적합이 진행된다고 생각
+- 좀 더 모델을 돌려볼 필요 있음
+
+**무강수/강수 분류모델을 통해서 데이터 추가하는 방식**
+
+### FSTM_ Fast Data LSTM Model
+- 기술 지표를 넣기 위해서 각 시간당 하나의 데이터를 미리 선별
+- 해당 시간 중 가장 dh가 작은 데이터를 사용
+
+<img src="./images/DH 영향도 확인.png" />
+
+DH가 작을수록 데이터의 신뢰성이 높아진다는 것을 가설로 함.
+
 
 
 

@@ -1,44 +1,40 @@
 from tqdm import tqdm
 import numpy as np
 from tensorflow import keras
+from pykalman import KalmanFilter
 
 
 def dstm_model(timestep=5):
     input_X = keras.layers.Input((timestep,20,14))
-    process_channel = []
-    for i in range(14):
-        # None, timestep, 20
-        channel_slice = input_X[:,:,:,i]
-        process_timestep = []
-        for j in range(timestep):
-            #None, 20
-            process = keras.layers.Dense(5,activation="sigmoid",input_shape=(20,))(channel_slice[:,j,:])
-            process = keras.layers.Dense(3,activation="sigmoid",input_shape=(20,))(process)
-            process_timestep.append(process)
-        # (5,3)
-        process_timestep = keras.layers.Concatenate()(process_timestep)
-        process_channel.append(keras.layers.Reshape((timestep,3))(process_timestep))
-    #(timestep,)
-    X = keras.layers.Concatenate(axis=-1)(process_channel)
-    curr_procssing = []
+    # None, timestep, 20, 14
+    channel_process = []
     for i in range(timestep):
-        curr = X[:,i,:]
-        # (42,)
-        curr = keras.layers.Dense(100, activation="tanh")(curr)
-        curr = keras.layers.Dropout(0.2)(curr)
-        curr = keras.layers.Dense(50, activation="relu")(curr)
-        curr = keras.layers.Dropout(0.2)(curr)
-        curr = keras.layers.Dense(24, activation="relu")(curr)
-        curr = keras.layers.BatchNormalization()(curr)
-        curr = keras.layers.Dense(12, activation="relu")(curr)
-        curr_procssing.append(curr)
-    X = keras.layers.Concatenate()(curr_procssing)
-    X = keras.layers.Reshape((timestep,12))(X)
-    X = keras.layers.LSTM(15,input_shape=(5,12))(X)
+        channel_ = input_X[:,i,:,:] 
+        channel_=keras.layers.LSTM(10,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,14))(channel_)
+        channel_=keras.layers.LSTM(10,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,10))(channel_)
+        channel_=keras.layers.LSTM(10,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,10))(channel_)
+        channel_=keras.layers.LSTM(10, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,10))(channel_)
+        #output = None,1,10
+        channel_process.append(channel_)
+ 
+    #(timestep,)
+    X = keras.layers.Concatenate()(channel_process)
+    X = keras.layers.Reshape((timestep,10))(X)
+    # None, timestep, 10
+    X = keras.layers.LSTM(50, return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,10))(X)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.LSTM(50, return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,50))(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.LSTM(50, return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,50))(X)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.LSTM(50,recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,50))(X)
+    X = keras.layers.BatchNormalization()(X)
     X = keras.layers.Dense(10, activation="softmax")(X)
 
     lmodel = keras.Model(inputs=input_X, outputs=X)
     return lmodel
+
+
 
 def create_dstm_data_set(df,timestep=5, sample_weight=False):
     X = []
@@ -54,11 +50,19 @@ def create_dstm_data_set(df,timestep=5, sample_weight=False):
             if max_len == n:
                 tmp3.append(np.array(i))
             else:
+                #평균값
                 tmp3.append(np.vstack([np.array(i),np.array([(np.mean(np.array(i),axis=0))] * (max_len-n))]))
+                # DH 빠른 값
+                # tmp3.append(np.vstack([np.array(i),np.array([np.array(i[0])] * (max_len-n))]))
+                # print(i[0])
+                # break
         y_tmp = stn_df.groupby(by=['rainfall_train.ef_year','day','rainfall_train.ef_hour'])['class'].mean().values.astype(int)
-        Y.extend(y_tmp[5:])
+        Y.extend(y_tmp)
         m = len(tmp3) - timestep
         tmp4 = []
+        for i in range(timestep):
+            s = np.array(tmp3[0:i+1])
+            tmp4.append(np.vstack([s,np.repeat(tmp3[i].reshape(1,20,14), timestep - (i+1), axis=0)]))
         for i in range(m):
             tmp4.append(np.array(tmp3[i:i+timestep]))
         X.extend(tmp4)
@@ -66,3 +70,101 @@ def create_dstm_data_set(df,timestep=5, sample_weight=False):
     if sample_weight:
         sample_weights[Y !=0] = 3
     return np.array(X),np.array(Y),sample_weights
+
+
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
+from sklearn.preprocessing import MinMaxScaler, LabelEncoder, OneHotEncoder
+
+
+def create_all_data_set():
+    rain_train = pd.read_csv("./rainfall_train.csv")
+    rain_train.columns = [
+        'Unnamed: 0',
+        'fc_year', 'fc_month', 'fc_day', 'fc_hour',
+        'stn4contest', 'dh',
+        'ef_year', 'ef_month', 'ef_day', 'ef_hour',
+        'v01', 'v02', 'v03', 'v04', 'v05', 'v06', 'v07', 'v08', 'v09',
+        'vv', 'class_interval'
+    ]
+
+    # 불필요한 변수 제거
+    rain_train.drop(columns=['Unnamed: 0'], inplace=True)
+
+    df = rain_train.copy()
+    # -999 값을 NaN으로 변환
+    df = df[df['class_interval'] != -999]
+
+    # 월별 누적 일수 계산
+    month_to_day = [31,28,31,30,31,30,31,31,30,31,30,31]
+    for i in range(1, 12):
+        month_to_day[i] += month_to_day[i-1]
+    month_to_day = {idx+2: i for idx, i in enumerate(month_to_day)}
+    month_to_day[1] = 0
+
+    # 주기적 특성 추가
+    df['day'] = df['ef_month'].apply(lambda x: month_to_day[x]) + df['ef_day']
+    df['day_sin'] = np.sin(2*np.pi*df['day']/365)
+    df['day_cos'] = np.cos(2*np.pi*df['day']/365)
+    # df = df.drop(columns=['ef_month', 'ef_day'])
+    
+    df['hour_sin'] = np.sin(2 * np.pi * df['ef_hour'] / 24)
+    df['hour_cos'] = np.cos(2 * np.pi * df['ef_hour'] / 24)
+    # df = df.drop(columns=['ef_hour'])
+    # 칼만 필터 적용 (예: v01 변수에 적용)
+    kf = KalmanFilter(initial_state_mean=0, n_dim_obs=1)
+    state_means, _ = kf.filter(df['v01'].values)
+    df['v01'] = state_means.flatten()
+
+    # 이진 분류를 위한 타겟 생성
+    df['binary_target'] = df['class_interval'].apply(lambda x: 0 if x == 0 else 1)
+
+    # OneHotEncoder를 사용하여 fc_year 원핫 인코딩
+    ohe = OneHotEncoder(handle_unknown='ignore')
+    fc_year_encoded = ohe.fit_transform(df[['fc_year']]).toarray()
+    fc_year_encoded_df = pd.DataFrame(fc_year_encoded, columns=ohe.get_feature_names_out(['fc_year']))
+    df = pd.concat([df, fc_year_encoded_df], axis=1)
+    df = df.drop(columns=['fc_year'])
+
+    # 필요한 특성 선택
+    features = ['dh', 'v01', 'v02', 'v03', 'v04', 'v05', 'v06', 'v07', 'v08', 'v09', 'day_sin', 'day_cos', 'hour_sin', 'hour_cos'] + list(fc_year_encoded_df.columns)
+    target = 'class_interval'
+    # df = df[features]
+    #중복없이 가장 예보와 예상시간이 가까운 경우 출력
+    #데이터 수를 줄이는 알고리즘 따로 정리할 필요가 있음
+    # close_tr = df[df['dh']<=12]
+    #ef_hour
+    df['forecast'] = df['ef_hour'] + df['dh'] 
+    df['forecast'] = np.where(df['forecast'] == 24, 0, df['forecast'])
+    df['forecast'] = np.where(df['forecast'] > 24, df['forecast'] - 24, df['forecast'])
+    # df = df.copy().drop(['ef_hour'], axis=True)
+    #언더샘플링을 위한 v00 컬럼생성
+    df['v00'] = (df[['v01', 'v02', 'v03', 'v04', 'v05', 'v06', 'v07', 'v08', 'v09']].sum(axis=1) == 0).astype(int) * 100
+    #kalmanfilter
+    for var in ['v01', 'v02', 'v03', 'v04', 'v05', 'v06', 'v07', 'v08', 'v09']:
+        kf = KalmanFilter(initial_state_mean=0, n_dim_obs=1)
+        state_means, _ = kf.filter(df[var].values)
+        df[f'{var}_kalman'] = state_means.flatten()
+    return df
+
+
+
+
+
+
+
+def data_sampling(df):
+    #데이터 샘플링 관련
+    # 데이터 언더샘플링
+    df_class_0 = df[df['class_interval'] == 0]
+    df_class_non_0 = df[df['class_interval'] != 0]
+    
+    # class_interval 값이 0인 데이터의 언더샘플링
+    df_class_0_under = df_class_0.sample(len(df_class_non_0), random_state=42)
+    
+    # 언더샘플링된 데이터와 나머지 데이터를 결합
+    df_balanced = pd.concat([df_class_0_under, df_class_non_0])
+
+
+
