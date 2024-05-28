@@ -572,8 +572,6 @@ def dstm_model(timestep=5):
     input_X1 = input_X[:,:,:,0:14]
     input_X2 = input_X[:,:,:,14]
     input_X3 = input_X[:,:,:,15]
-
-
     # None, timestep, 20, 14
     channel_process = []
     for i in range(timestep):
@@ -628,7 +626,16 @@ def dstm_model(timestep=5):
 <tr><td><img src="./images/Dense_ML_first_loss.png" /></td><td><img src="./images/Dense_ML_first_loss.png" /></td></tr>
 </table>
 
-- 학습이
+- Dense 층에 머신러닝 결과를 적용하니, Validation과  Trainning CSI 점수가 안정적으로 0.1까지 올라감
+- 0.1 이상까지 학습이 진행되지는 않음
+
+**RBPLSTM: Regression 모델 제외**
+
+```python
+
+```
+
+
 
 ### FSTM_ Fast Data LSTM Model
 - 시간당 하나의 데이터를 선별
@@ -700,6 +707,53 @@ def fstm_model(timestep=5):
     lmodel = keras.Model(inputs=input_X, outputs=X)
     return lmodel
 ```
+
+>   학습결과
+
+<img src="./images/fstm 결과.png" />
+
+- 머신러닝 결과를 적용해도 학습이 잘 되지는 않음
+
+
+**FSTM: 기술지표 데이터 추가**
+
+>   모델 구조
+
+```python
+def fstm_model(timestep=5):
+    #(None,Timestep,26)
+    input_X = keras.layers.Input((timestep,24))
+    input_X1 = input_X[:,:,0:22]
+    input_X2 = input_X[:,-1,22]
+    input_X3 = input_X[:,-1,23]
+    X2 = keras.layers.Reshape((1,))(input_X2)
+    X3 = keras.layers.Reshape((1,))(input_X3)
+    # None, timestep, 20, 14
+    X = keras.layers.LSTM(70,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,14))(input_X1)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.LSTM(70,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,70))(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.LSTM(70,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,70))(X)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.LSTM(70, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,70))(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.Concatenate()([X,X2])
+    X = keras.layers.Dense(50, activation="relu")(X)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.Dense(25, activation="relu")(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.Concatenate()([X,X3])
+    X = keras.layers.Dense(10, activation="softmax")(X)
+    lmodel = keras.Model(inputs=input_X, outputs=X)
+    return lmodel
+```
+
+>   학습 결과
+<img src="./images/FSTM_기술지표 추가 결과.png" />
+
+- 기술 지표 추가시 데이터가 0으로 맞춰지는 현상 발생
+- 따로 기술 지표를 추가한지 않는 방향
+
 
 
 ### ASTM Attention LSTM

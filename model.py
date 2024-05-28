@@ -6,13 +6,25 @@ from pykalman import KalmanFilter
 from sklearn.ensemble import RandomForestRegressor
 import talib
 
+
+def end_model(timestep=5):
+    input_X = keras.layers.Input((timestep, None,16))
+    X = keras.LSTM(50)(input_X)
+    # timestep, 50
+    outputs, h, c= keras.layers.LSTM(10,return_state=True)()
+    # outputs (10)
+    # input_D = keras.layers.Input()(outputs)
+    encode_state = [h,c]
+    #decode
+    keras.layer.LSTM(10, return_squences=True, return_state=True, intial_state=encode_state)()
+
+    return keras.Model(inputs=input_X, outputs=X)
+
 def dstm_model(timestep=5):
     input_X = keras.layers.Input((timestep,20,16))
     input_X1 = input_X[:,:,:,0:14]
-    input_X2 = input_X[:,:,:,14]
-    input_X3 = input_X[:,:,:,15]
-
-
+    input_X2 = input_X[:,-1,-1,14]
+    input_X3 = input_X[:,-1,-1,15]
     # None, timestep, 20, 14
     channel_process = []
     for i in range(timestep):
@@ -27,10 +39,8 @@ def dstm_model(timestep=5):
         channel_ = keras.layers.BatchNormalization()(channel_)
         #output = None,1,10
         channel_process.append(channel_)
-    X1 = keras.layers.Lambda(lambda x: tf.reduce_mean(x, axis=-1))(input_X2)
-    X1 =keras.layers.Lambda(lambda x: tf.reduce_mean(x, axis=-1))(X1)
-    X2 =keras.layers.Lambda(lambda x: tf.reduce_mean(x, axis=-1))(input_X3)
-    X2 =keras.layers.Lambda(lambda x: tf.reduce_mean(x, axis=-1))(X2)
+    X1 = keras.layers.Reshape((1,))(input_X2)
+    X2 =keras.layers.Reshape((1,))(input_X3)
  
     #(timestep,)
     X = keras.layers.Concatenate()(channel_process)
@@ -50,21 +60,17 @@ def dstm_model(timestep=5):
     X = keras.layers.Dropout(0.2)(X)
     X = keras.layers.Dense(10, activation="relu")(X)
     X = keras.layers.BatchNormalization()(X)
-    X1 =keras.layers.Reshape((1,))(X1)
-    print(X1.shape)
-    X2 =keras.layers.Reshape((1,))(X2)
-    X = keras.layers.Concatenate(axis=-1)([X,X1,X2])
+    X = keras.layers.Concatenate(axis=-1)([X,X2])
     X = keras.layers.Dense(10, activation="softmax")(X)
-
     lmodel = keras.Model(inputs=input_X, outputs=X)
     return lmodel
 
 def fstm_model(timestep=5):
     #(None,Timestep,26)
-    input_X = keras.layers.Input((timestep,16))
-    input_X1 = input_X[:,:,0:14]
-    input_X2 = input_X[:,-1,14]
-    input_X3 = input_X[:,-1,15]
+    input_X = keras.layers.Input((timestep,24))
+    input_X1 = input_X[:,:,0:22]
+    input_X2 = input_X[:,-1,22]
+    input_X3 = input_X[:,-1,23]
     X2 = keras.layers.Reshape((1,))(input_X2)
     X3 = keras.layers.Reshape((1,))(input_X3)
     # None, timestep, 20, 14
@@ -76,10 +82,50 @@ def fstm_model(timestep=5):
     X = keras.layers.Dropout(0.2)(X)
     X = keras.layers.LSTM(70, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,70))(X)
     X = keras.layers.BatchNormalization()(X)
-    X = keras.layers.Concatenate()([X,X2,X3])
+    X = keras.layers.Concatenate()([X,X2])
+    X = keras.layers.Dense(50, activation="relu")(X)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.Dense(25, activation="relu")(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.Concatenate()([X,X3])
     X = keras.layers.Dense(10, activation="softmax")(X)
     lmodel = keras.Model(inputs=input_X, outputs=X)
     return lmodel
+
+def create_ldstm_data_set(df,timestep=5):
+    X = []
+    Y = []
+    df['list'] = df.drop(columns=['VV','STN','V0','rainfall_train.ef_year','day','rainfall_train.ef_hour','class']).apply(lambda x: np.array(x),axis=1)
+    sample_weights = 1-df['class'].value_counts(normalize=True).values
+    for i in tqdm(range(1,21)):
+        stn_df = df[df["STN"] == f"STN0{'%02d' % i}"].copy()
+        tmp2 = stn_df.groupby(by=['rainfall_train.ef_year','day','rainfall_train.ef_hour'])['list'].apply(list).values
+        max_len = 20
+        tmp3 = []
+        for i in tmp2:
+            n = len(i)
+            if max_len == n:
+                tmp3.append(np.array(i))
+            else:
+                #평균값
+                tmp3.append(np.vstack([np.array(i),np.array([(np.mean(np.array(i),axis=0))] * (max_len-n))]))
+                # DH 빠른 값
+                # tmp3.append(np.vstack([np.array(i),np.array([np.array(i[0])] * (max_len-n))]))
+                # print(i[0])
+                # break
+        y_tmp = stn_df.groupby(by=['rainfall_train.ef_year','day','rainfall_train.ef_hour'])['class'].mean().values.astype(int)
+        Y.extend(y_tmp)
+        m = len(tmp3) - timestep
+        tmp4 = []
+        for i in range(timestep):
+            s = np.array(tmp3[0:i+1])
+            tmp4.append(np.vstack([s,np.repeat(tmp3[i].reshape(1,20,16), timestep - (i+1), axis=0)]))
+        for i in range(m):
+            tmp4.append(np.array(tmp3[i:i+timestep]))
+        X.extend(tmp4)
+    Y = np.array(Y)
+    sample_weights = sample_weights[Y]*10
+    return np.array(X),Y,sample_weights
 
 def create_fstm_data_set(df,timestep=5):
     X = []
