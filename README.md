@@ -289,7 +289,7 @@ model.add(keras.layers.Dense(1, activation='sigmoid'))
 >   강수데이터에 대해서 Random Forest 성능 평가 
 <img src="./images/최적의 RandomForeset.png" />
 
-
+## LSTM
 ### SIMPLE LSTM
 
 ```python
@@ -632,9 +632,54 @@ def dstm_model(timestep=5):
 **RBPLSTM: Regression 모델 제외**
 
 ```python
-
+def dstm_model(timestep=5):
+    input_X = keras.layers.Input((timestep,20,16))
+    input_X1 = input_X[:,:,:,0:14]
+    input_X2 = input_X[:,-1,-1,14]
+    input_X3 = input_X[:,-1,-1,15]
+    # None, timestep, 20, 14
+    channel_process = []
+    for i in range(timestep):
+        channel_ = input_X1[:,i,:,:] 
+        channel_=keras.layers.LSTM(10,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,16))(channel_)
+        channel_ = keras.layers.Dropout(0.2)(channel_)
+        channel_=keras.layers.LSTM(10,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,10))(channel_)
+        channel_ = keras.layers.BatchNormalization()(channel_)
+        channel_=keras.layers.LSTM(10,return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,10))(channel_)
+        channel_ = keras.layers.Dropout(0.2)(channel_)
+        channel_=keras.layers.LSTM(10, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(20,10))(channel_)
+        channel_ = keras.layers.BatchNormalization()(channel_)
+        #output = None,1,10
+        channel_process.append(channel_)
+    X1 = keras.layers.Reshape((1,))(input_X2)
+    X2 =keras.layers.Reshape((1,))(input_X3)
+ 
+    #(timestep,)
+    X = keras.layers.Concatenate()(channel_process)
+    X = keras.layers.Reshape((timestep,10))(X)
+    # None, timestep, 10
+    X = keras.layers.LSTM(50, return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,10))(X)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.LSTM(50, return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,50))(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.LSTM(50, return_sequences=True, recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,50))(X)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.LSTM(50,recurrent_regularizer=keras.regularizers.l2(0.01),input_shape=(timestep,50))(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.Dense(30, activation="relu")(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.Dense(15, activation="relu")(X)
+    X = keras.layers.Dropout(0.2)(X)
+    X = keras.layers.Dense(10, activation="relu")(X)
+    X = keras.layers.BatchNormalization()(X)
+    X = keras.layers.Concatenate(axis=-1)([X,X2])
+    X = keras.layers.Dense(10, activation="softmax")(X)
+    lmodel = keras.Model(inputs=input_X, outputs=X)
+    return lmodel
 ```
+>   학습결과
 
+<img src="./images/D(L)STM_final.png" />
 
 
 ### FSTM_ Fast Data LSTM Model
@@ -754,20 +799,112 @@ def fstm_model(timestep=5):
 - 기술 지표 추가시 데이터가 0으로 맞춰지는 현상 발생
 - 따로 기술 지표를 추가한지 않는 방향
 
+### TSTM Teaching LSTM 
+
+- 학습이 제대로 이루어지지 않고 있다고 판단
+- Encoder-Decoder의 Teaching 개념을 사용하여 모델을 설계
+- 뒷부분의 LSTM의 각 단계에서 입력 값으로 정답 데이터를 주고 학습
+- 어느 정도 학습이 되었다고 판단되었을 때, encoder의 학습을 멈추고 Decoder layer을 encoder output으로 학습
+- 회귀모델(종속변수: 실강수량)으로 설계
+    - scaling을 StandardScaler를 사용할 때, 모든 값이 0으로 되는 현상발생
+    - minmax sclaer를 사용하기에는 각 연도별, min-max 값의 편차가 심함
+    - 스케일링 없이 진행
+
+**encode_decode 모델**
+
+```python
+from tensorflow import keras
+timestep=5
+input_X = keras.layers.Input((timestep,20,15))
+input_Y = keras.layers.Input((timestep,1))
+#각 DH 마다의 가중치에 따라 feature 생성
+unit = 1
+channel_process = []
+
+# 인코딩 과정
+for i in range(timestep):
+    _channel = keras.layers.Lambda(lambda x : x[:,i,:,:])(input_X)
+    _channel = keras.layers.LSTM(100, input_shape=(20,15))(_channel)
+    channel_process.append(_channel)
+encode_X = keras.layers.Concatenate()(channel_process)
+encode_X = keras.layers.Reshape((timestep,100))(encode_X)
+encode_X = keras.layers.LSTM(100, return_sequences=True, input_shape=(timestep,))(encode_X)
+encode_X = keras.layers.LSTM(50, return_sequences=True, input_shape=(timestep,))(encode_X)
+encode_X = keras.layers.LSTM(10, return_sequences=True, input_shape=(timestep,))(encode_X)
+encode_out,h,c = keras.layers.LSTM(1, return_sequences=True, return_state=True, input_shape=(timestep,))(encode_X)
+# 디코딩 과정
+d_h = keras.layers.Reshape((1,))(h[:,-1])
+d_c = keras.layers.Reshape((1,))(c[:,-1])
+d_o = keras.layers.Reshape((1,1))(encode_out[:,0])
+encode_state = [d_h,d_c]
+# 비교 (timestep, 10)
+DX = keras.layers.Concatenate(axis=1)([d_o,input_Y[:,:-1]])
+decoder_lstm = keras.layers.LSTM(unit, return_sequences=True)
+DX = decoder_lstm(DX,initial_state=encode_state)
+DX = keras.layers.Flatten()(DX)
+```
+>   학습 결과
+<img src="./images/tstm_result.png" />
+- 회귀 모델로는 전혀 학습되지 않음을 볼 수 있다.
+- decoder의 복잡하지 않은 모델가 회귀 데이터의 다양한 범위를 반영하지 못하는것으로 판단
+
+### cluster-bassd machine learning model
+- 데이터의 분포를 나눠서 머신러닝으로 분류하도록 하는 알고리즘
+
+>   프로세스
+1. 비슷한 데이터 분포를 띄는 것끼리 데이터를 나눔
+2. 나눠진 각 클러스터 마다 앙상블 모델(랜덤 포레스트 적용)
+
+#### 클러스터 나누기
+- 별개의 시간과 장소에 대한 데이터만 남기도록 데이터를 전처리
+    - dh가 가장 작은 것으로 판단
+- DBSCAN을 사용하려고 하였지만, 데이터의 크기가 커서 커널이 죽음
+
+**최소 dh 데이터 분포**
+```
+
+```
+
+- 다수의 독립변수(V0-V9,day,hour)를 하나의 종 벡터로 간주
+- 각 데이터간의 거리를 계산 후 거리를 기반으로 데이터 클러스터를 나눈다.
+- 실루엣 점수를 계산
+$s(i) = \frac{b(i) - a(i)}{max(a(i),b(i))}$
+    - b(i)는 가장 가까운 군집과의 평균거리
+    - a(i)는 동일한 군집내에서의 평균 거리
+    - 개별 군집에서 전체 실루엣 계수가 클 수록 성능이 우수
+    - 군집 내 개별 요소들의 실루엣 점수가 비슷해야지 성능이 좋다.
+
+>   학습결과
+
+**train data 군집화**
+<img src="./images/kmeans_cluster.png" />
+
+**test data 군집화**
+<img src="./images/test_cluster_kmeans.png" />
+
+**train data csi 점수**
+
+```python
+0th cluster csi score : 0.12154793315743184
+1th cluster csi score : 0.7101200686106347
+2th cluster csi score : 0.7320261437908496
+3th cluster csi score : 0.7373737373737373
+```
+**test data csi 점수**
+
+```python
+0th cluster csi score : 0.002157829839704069
+1th cluster csi score : 0.0
+2th cluster csi score : 0.000970873786407767
+3th cluster csi score : 0.00906344410876133
+```
+- 훈련데이터와 테스트 데이터에 대해서 일치하지 않음
+- 일반적인 데이터의 분포를 모델이 학습하지 못하고 있음
+- LogisticRegression과 같은 간단한 모델로 학습시 train 데이터와 test 데이터 둘 다에서 0점밖에 나오지 않음
+- **군집화를 한 상태에서 각각의 데이터를 나눴을 때, 데이터 분포를 설명하기 위해서 모델은 복잡해야 하지만, Overfitting 되는 현상 발생**
 
 
-### ASTM Attention LSTM
-
-
-
-- Optimizer : RMSprop, learning_rate : 0.0001
-- 강수 데이터에 대해서 가중치를 높임 (무강수:강수 = 1:10)
-
-
->   변수 영향도 파악 모델
 
 
 
 
-
-> 전체 데이터에 대해서 점수

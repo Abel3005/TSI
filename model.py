@@ -4,21 +4,26 @@ import tensorflow as tf
 from tensorflow import keras
 from pykalman import KalmanFilter
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import MinMaxScaler
 import talib
 
 
-def end_model(timestep=5):
-    input_X = keras.layers.Input((timestep, None,16))
-    X = keras.LSTM(50)(input_X)
-    # timestep, 50
-    outputs, h, c= keras.layers.LSTM(10,return_state=True)()
-    # outputs (10)
-    # input_D = keras.layers.Input()(outputs)
+def tstm_model(timestep=5):
+    input_X = keras.layers.Input((timestep,20,16))
+    input_Y = keras.layers.Input((timestep,10))
+    #각 DH 마다의 가중치에 따라 feature 생성
+    channel_process = []
+    for i in range(timestep):
+        _channel = input_X[:,i,:,:]
+        _channel = keras.layers.LSTM(10, input_shape=(20,16))(_channel)
+        channel_process.append(_channel)
+    X = keras.layers.Concatenate()(channel_process)
+    X = keras.layers.Reshape((timestep,10))(X)
+    out, h, c = keras.layers.LSTM(10, return_state=True)(X)
     encode_state = [h,c]
-    #decode
-    keras.layer.LSTM(10, return_squences=True, return_state=True, intial_state=encode_state)()
-
-    return keras.Model(inputs=input_X, outputs=X)
+    # 비교 (timestep, 10)
+    X = keras.layers.LSTM(10, return_squences=True, intial_state=encode_state)(input_Y)
+    return keras.Model(inputs=[input_X,input_Y], outputs=X)
 
 def dstm_model(timestep=5):
     input_X = keras.layers.Input((timestep,20,16))
@@ -126,6 +131,59 @@ def create_ldstm_data_set(df,timestep=5):
     Y = np.array(Y)
     sample_weights = sample_weights[Y]*10
     return np.array(X),Y,sample_weights
+
+def create_tstm_data_set(df,scalersp=None,timestep=5):
+    X = []
+    Y = []
+    scalers = []
+    len_stn =[]
+    y_class =[]
+    df['list'] = df.drop(columns=['VV','STN','V0','rainfall_train.ef_year','day','rainfall_train.ef_hour','class','RP']).apply(lambda x: np.array(x),axis=1)
+    sample_weights = 1-df['class'].value_counts(normalize=True).values
+    for i in tqdm(range(1,21)):
+        # scaler = MinMaxScaler()
+        stn_df = df[df["STN"] == f"STN0{'%02d' % i}"].copy()
+        tmp2 = stn_df.groupby(by=['rainfall_train.ef_year','day','rainfall_train.ef_hour'])['list'].apply(list).values
+        max_len = 20
+        tmp3 = []
+        for j in tmp2:
+            n = len(j)
+            if max_len == n:
+                tmp3.append(np.array(j))
+            else:
+                #평균값
+                tmp3.append(np.vstack([np.array(j),np.array([(np.mean(np.array(j),axis=0))] * (max_len-n))]))
+                # DH 빠른 값
+                # tmp3.append(np.vstack([np.array(i),np.array([np.array(i[0])] * (max_len-n))]))
+                # print(i[0])
+                # break
+        y_tmp = stn_df.groupby(by=['rainfall_train.ef_year','day','rainfall_train.ef_hour'])['VV'].mean().values
+        # scaler.fit([y_tmp])
+        # if scalersp:
+            # y_tmp = scalersp[i].transform([y_tmp]).reshape(-1)
+        # else:
+            # y_tmp = scaler.transform([y_tmp]).reshape(-1)
+        y_class.extend(stn_df.groupby(by=['rainfall_train.ef_year','day','rainfall_train.ef_hour'])['class'].mean().values.astype(int))
+        # scalers.append(scaler)
+        m = len(tmp3) - timestep
+        tmp4 = []
+        tmp_Y = []
+        for i in range(timestep):
+            s = np.array(tmp3[0:i+1])
+            t = np.array(y_tmp[0:i+1]).reshape((i+1),1)
+            tmp4.append(np.vstack([s,np.repeat(tmp3[i].reshape(1,20,15), timestep - (i+1), axis=0)]))
+            tmp_Y.append(np.vstack([t,np.repeat(y_tmp[i].reshape(1,1), timestep -(i+1), axis=0)]))
+        for i in range(m):
+            tmp4.append(np.array(tmp3[i:i+timestep]))
+            tmp_Y.append(np.array(y_tmp[i:i+timestep]).reshape(timestep,1))
+        X.extend(tmp4)
+        Y.extend(tmp_Y)
+        len_stn.append(len(y_tmp))
+    # Y.shape(None, timestep,1)
+    Y = np.array(Y) 
+    sample_= np.array(y_class)
+    sample_weights = sample_weights[sample_]*10
+    return np.array(X),Y,sample_weights,len_stn
 
 def create_fstm_data_set(df,timestep=5):
     X = []
