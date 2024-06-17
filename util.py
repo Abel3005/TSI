@@ -1,12 +1,59 @@
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
 from sklearn.linear_model import LogisticRegression
 import pickle
 
+train_data_path = "./data/rainfall_train.csv"
+test_data_path = "./data/rainfall_test.csv"
 
-def preprocessing_simple_train(csvfile='rainfall_train.csv'):
-    train_df = pd.read_csv('rainfall_train.csv')
+
+def make_mean(df, _n = 15):
+    # previously make v_max, v_median column
+    stn_array = df['rainfall_train.stn4contest'].unique()
+    year_array = df['rainfall_train.ef_year'].unique()
+    df['mean_vmax'] = None
+    df['mean_vmedian'] = None
+    for y in year_array:
+        tmp_df = df[df['rainfall_train.ef_year'] == y]
+        for _stn in stn_array:
+            _array = tmp_df[tmp_df['rainfall_train.stn4contest'] == _stn].sort_values(by=['rainfall_train.ef_month','rainfall_train.ef_day','rainfall_train.ef_hour'])[['rainfall_train.ef_year','rainfall_train.stn4contest','rainfall_train.ef_month','rainfall_train.ef_day','rainfall_train.ef_hour','v_max','v_median']]
+            N = len(_array)
+            mean_vmax = []
+            mean_vmedian = []
+            for idx  in range(N):
+                start = max(idx-15, 0)
+                end = min(idx+15,N-1)
+                mean_vmax.append(_array['v_max'].values[start:end].mean())
+                mean_vmedian.append(_array['v_median'].values[start:end].mean())
+            _array['avg_vmax'] = np.array(mean_vmax)
+            _array['avg_vmedian'] = np.array(mean_vmedian)
+            _array = _array.drop(columns=['v_max','v_median'])
+            df = pd.merge(df,_array,how='left',on=['rainfall_train.ef_year','rainfall_train.stn4contest','rainfall_train.ef_month','rainfall_train.ef_day','rainfall_train.ef_hour'])
+            df['mean_vmax'] = df['avg_vmax'].combine_first(df['mean_vmax']) 
+            df['mean_vmedian'] = df['avg_vmedian'].combine_first(df['mean_vmedian']) 
+            df = df.drop(columns=['avg_vmax','avg_vmedian'])
+    return df
+
+def make_day2class(df):
+    #please make 'day' column
+    tmp = df.groupby(by=['day'])['rainfall_train.class_interval'].mean().reset_index()
+    tmp2 = StandardScaler().fit_transform(tmp[['rainfall_train.class_interval']])
+    tmp['rainfall_train.class_interval'] = tmp2
+    return tmp
+def make_day2freqclass(df):
+    df = df.copy()
+    df = df[df['rainfall_train.class_interval'] !=0]
+    tmp = df.groupby(by=['day'])['rainfall_train.class_interval'].apply(lambda x: np.argmax(np.bincount(np.array(x)))).reset_index()
+    return tmp
+def month_to_day(month):
+    month_to_day = np.array([0,31,28,31,30,31,30,31,31,30,31,30,31])
+    for i in range(1,13):
+        month_to_day[i] += month_to_day[i-1] 
+    return month_to_day[month]
+
+def preprocessing_simple_train(_method="fast"):
+    train_df = pd.read_csv(train_data_path)
     train_df = train_df[['rainfall_train.stn4contest', 'rainfall_train.dh',
        'rainfall_train.ef_year', 'rainfall_train.ef_month',
        'rainfall_train.ef_day', 'rainfall_train.ef_hour', 'rainfall_train.v01',
@@ -14,32 +61,60 @@ def preprocessing_simple_train(csvfile='rainfall_train.csv'):
        'rainfall_train.v05', 'rainfall_train.v06', 'rainfall_train.v07',
        'rainfall_train.v08', 'rainfall_train.v09', 'rainfall_train.vv',
        'rainfall_train.class_interval']]
-    tmp = train_df.groupby(by=['rainfall_train.stn4contest','rainfall_train.ef_year','rainfall_train.ef_month','rainfall_train.ef_day','rainfall_train.ef_hour'])['rainfall_train.dh'].min().reset_index()
-    result = pd.merge(train_df,tmp, on=['rainfall_train.stn4contest','rainfall_train.ef_year','rainfall_train.ef_month','rainfall_train.ef_day','rainfall_train.ef_hour'])
-    result = result[result['rainfall_train.dh_x'] == result['rainfall_train.dh_y']].drop(columns=['rainfall_train.dh_x','rainfall_train.dh_y'])
+    train_df = train_df[train_df["rainfall_train.class_interval"] != -999]
     for i in range(1,9):
-        result[f'rainfall_train.v0{i}'] -=  result[f'rainfall_train.v0{i+1}']
-        result[f'rainfall_train.v0{i}'] /= 100.0
-    result[f'rainfall_train.v09'] /= 100.0
+        train_df[f'rainfall_train.v0{i}'] -=  train_df[f'rainfall_train.v0{i+1}']
+        train_df[f'rainfall_train.v0{i}'] /= 100.0
+    train_df[f'rainfall_train.v09'] /= 100.0
+    if _method == "fast":
+        tmp = train_df.groupby(by=['rainfall_train.stn4contest','rainfall_train.ef_year','rainfall_train.ef_month','rainfall_train.ef_day','rainfall_train.ef_hour'])['rainfall_train.dh'].min().reset_index()
+        result = pd.merge(train_df,tmp, on=['rainfall_train.stn4contest','rainfall_train.ef_year','rainfall_train.ef_month','rainfall_train.ef_day','rainfall_train.ef_hour'])
+        result = result[result['rainfall_train.dh_x'] == result['rainfall_train.dh_y']].drop(columns=['rainfall_train.dh_y'])
+    if _method == 'mean':
+        tmp = train_df.groupby(by=['rainfall_train.stn4contest','rainfall_train.ef_year','rainfall_train.ef_month','rainfall_train.ef_day','rainfall_train.ef_hour']).mean().reset_index()
+        result = tmp.drop(columns=['rainfall_train.dh'])
+    if _method == 'median':
+        tmp = train_df.groupby(by=['rainfall_train.stn4contest','rainfall_train.ef_year','rainfall_train.ef_month','rainfall_train.ef_day','rainfall_train.ef_hour']).median().reset_index()
+        result = tmp.drop(columns=['rainfall_train.dh'])
+    tmp = 1 - result[['rainfall_train.v01','rainfall_train.v02','rainfall_train.v03','rainfall_train.v04','rainfall_train.v05',
+        'rainfall_train.v06','rainfall_train.v07','rainfall_train.v08','rainfall_train.v09']].apply(lambda x: sum(x),axis=1)
+    result['rainfall_train.v00'] = tmp
+    result['v_max'] = result[['rainfall_train.v00','rainfall_train.v01','rainfall_train.v02','rainfall_train.v03','rainfall_train.v04','rainfall_train.v05',
+        'rainfall_train.v06','rainfall_train.v07','rainfall_train.v08','rainfall_train.v09']].apply(lambda x: max(enumerate(x),key=lambda x: x[1])[0],axis=1)
+    _median = np.array([0.15,0.35,0.75,1.5,3.5,7.5,15.0,25.0,30.0])
+    result['v_median'] = result[['rainfall_train.v01','rainfall_train.v02','rainfall_train.v03','rainfall_train.v04','rainfall_train.v05',
+        'rainfall_train.v06','rainfall_train.v07','rainfall_train.v08','rainfall_train.v09']].apply(lambda x: (x * _median).sum(),axis=1)
+    result.drop(columns=['rainfall_train.v00'])
     return result
 
 
-def preprocessing_simple_test(csvfile='rainfall_test.csv'):
-    df = pd.read_csv('rainfall_test.csv')
+def preprocessing_simple_test(csvfile=test_data_path):
+    df = pd.read_csv(csvfile)
     df = df.drop(columns=['Unnamed: 0', 'rainfall_test.fc_year', 'rainfall_test.fc_month',
-       'rainfall_test.fc_day', 'rainfall_test.fc_hour','rainfall_test.ef_year'])
+       'rainfall_test.fc_day', 'rainfall_test.fc_hour'])
+    df = df[df["rainfall_test.class_interval"] != -999]
+    
     tmp = df.groupby(by=['rainfall_test.stn4contest','rainfall_test.ef_month','rainfall_test.ef_day','rainfall_test.ef_hour'])['rainfall_test.dh'].min().reset_index()
     tmp2 = pd.merge(df,tmp,on=['rainfall_test.stn4contest','rainfall_test.ef_month','rainfall_test.ef_day','rainfall_test.ef_hour'])
-    result = tmp2[tmp2['rainfall_test.dh_x']==tmp2['rainfall_test.dh_y']].drop(columns=['rainfall_test.dh_x','rainfall_test.dh_y'])
-    result.columns = np.array(['STN', 'DHX', 'M', 'D','H', 'V1', 'V2','V3', 'V4', 'V5','V6', 'V7', 'V8','V9', 'class_interval'])
+    result = tmp2[tmp2['rainfall_test.dh_x']==tmp2['rainfall_test.dh_y']].drop(columns=['rainfall_test.dh_y'])
+
     for i in range(1,9):
-        result[f"V{i}"] = result[f"V{i}"] -result[f"V{i+1}"]
-    for i in range(1,10):
-        result[f"V{i}"] = result[f"V{i}"] / 100.0
+        result[f"rainfall_test.v0{i}"] -= result[f"rainfall_test.v0{i+1}"]
+        result[f"rainfall_test.v0{i}"] /= 100.0
+    result[f"rainfall_test.v09"] /= 100.0
+    tmp = 1 - result[['rainfall_test.v01','rainfall_test.v02','rainfall_test.v03','rainfall_test.v04','rainfall_test.v05',
+        'rainfall_test.v06','rainfall_test.v07','rainfall_test.v08','rainfall_test.v09']].apply(lambda x: sum(x),axis=1)
+    result['rainfall_test.v00'] = tmp
+    result['v_max'] = result[['rainfall_test.v00','rainfall_test.v01','rainfall_test.v02','rainfall_test.v03','rainfall_test.v04','rainfall_test.v05',
+        'rainfall_test.v06','rainfall_test.v07','rainfall_test.v08','rainfall_test.v09']].apply(lambda x: max(enumerate(x),key=lambda x: x[1])[0],axis=1)
+    _median = np.array([0.15,0.35,0.75,1.5,3.5,7.5,15.0,25.0,30.0])
+    result['v_median'] = result[['rainfall_test.v01','rainfall_test.v02','rainfall_test.v03','rainfall_test.v04','rainfall_test.v05',
+        'rainfall_test.v06','rainfall_test.v07','rainfall_test.v08','rainfall_test.v09']].apply(lambda x: (x * _median).sum(),axis=1)
+    result.drop(columns=['rainfall_test.v00'])
     return result
 
 
-def preprocessing_daegun(csvfile='rainfall_train.csv'):
+def preprocessing_daegun(csvfile=train_data_path):
     rainfall_train = pd.read_csv(csvfile)
     rainfall_train.drop(columns=['Unnamed: 0'],inplace= True)
 
@@ -68,7 +143,7 @@ def preprocessing_daegun(csvfile='rainfall_train.csv'):
     df[[f"V{i}" for i in range(1,10)]] = df[[f"V{i}" for i in range(1,10)]] / 100
     return df
 
-def preprocessing_ML_daegun(csvfile='rainfall_train.csv'):
+def preprocessing_ML_daegun(csvfile=train_data_path):
     rainfall_train = pd.read_csv(csvfile)
     rainfall_train.drop(columns=['Unnamed: 0'],inplace= True)
 
