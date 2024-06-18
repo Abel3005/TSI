@@ -38,9 +38,12 @@ def make_mean(df, _n = 15):
 def make_day2class(df):
     #please make 'day' column
     tmp = df.groupby(by=['day'])['rainfall_train.class_interval'].mean().reset_index()
-    tmp2 = StandardScaler().fit_transform(tmp[['rainfall_train.class_interval']])
-    tmp['rainfall_train.class_interval'] = tmp2
     return tmp
+def make_day2stdclass(df):
+    #please make 'day' column
+    tmp = df.groupby(by=['day'])['rainfall_train.class_interval'].std().reset_index()
+    return tmp
+
 def make_day2freqclass(df):
     df = df.copy()
     df = df[df['rainfall_train.class_interval'] !=0]
