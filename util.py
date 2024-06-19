@@ -22,8 +22,8 @@ def make_mean(df, _n = 15):
             mean_vmax = []
             mean_vmedian = []
             for idx  in range(N):
-                start = max(idx-15, 0)
-                end = min(idx+15,N-1)
+                start = max(idx-_n, 0)
+                end = min(idx+_n,N-1)
                 mean_vmax.append(_array['v_max'].values[start:end].mean())
                 mean_vmedian.append(_array['v_median'].values[start:end].mean())
             _array['avg_vmax'] = np.array(mean_vmax)
@@ -34,6 +34,12 @@ def make_mean(df, _n = 15):
             df['mean_vmedian'] = df['avg_vmedian'].combine_first(df['mean_vmedian']) 
             df = df.drop(columns=['avg_vmax','avg_vmedian'])
     return df
+
+def make_day2vv(df):
+    #please make 'day' column
+    tmp = df.groupby(by=['day'])['rainfall_train.vv'].mean().reset_index()
+    tmp['rainfall_train.vv'] = StandardScaler().fit_transform(tmp[['rainfall_train.vv']])
+    return tmp
 
 def make_day2class(df):
     #please make 'day' column
