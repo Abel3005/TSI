@@ -43,7 +43,7 @@ model.add(keras.layers.Dense(1, activation='sigmoid'))
 
 >   결과
 
-<img src="./images/DNN 강수_무강수.png" />
+<img src="../images/DNN 강수_무강수.png" />
 
 - 학습 시간이 오래 걸릴 뿐만이 아니라 오래걸림.
 - DNN 보다는 머신러닝과 V0 임계값을 이용하여 데이터 분류하는 방법 사용.
@@ -85,11 +85,11 @@ model.add(keras.layers.Dense(1, activation='sigmoid'))
 - 최적의 n_estimator 60으로 결정
 
 > A년도 dh = 0인 데이터에 대한 모델 평가
-<img src="./images/변수 영향도 결정을 위한 모델 성능 수치 가시화.png" />
+<img src="../images/변수 영향도 결정을 위한 모델 성능 수치 가시화.png" />
 
 > dh = 0인 강수 데이터에 대해서 성능 평가
-<img src="./images/(모든년도)변수 영향도 결정을 위한 모델 성능 수치 가시화.png" />
+<img src="../images/(모든년도)변수 영향도 결정을 위한 모델 성능 수치 가시화.png" />
 
 >   강수데이터에 대해서 Random Forest 성능 평가 
-<img src="./images/최적의 RandomForeset.png" />
+<img src="../images/최적의 RandomForeset.png" />
 

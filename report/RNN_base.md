@@ -10,7 +10,7 @@ model.add(Dense(10, activation="softmax"))
 
 > 학습 결과
 
-<img src="./images/lstm 학습 그래프.png" />
+<img src="../images/lstm 학습 그래프.png" />
 
 정확도,CSI 가 낮은 지점에서 수렴
 ```python
@@ -75,7 +75,7 @@ def dstm_model(timestep=5):
 ```
 > 학습결과
 
-<img src="./images/LSTM_first.png" />
+<img src="../images/LSTM_first.png" />
 
 - 모델이 local optima에 수렴한 것을 볼 수 있음
 
@@ -121,7 +121,7 @@ def dstm_model(timestep=5):
 ```
 >   학습결과
 
-<img src="./images/second_DSTM.png" />
+<img src="../images/second_DSTM.png" />
 
 - 이전보다 깊이 내려가지만 기울기가 급격히 내려가는 구간이 존재한다.
 - 검증데이터는 이전과 별반 차이가 없다.
@@ -178,8 +178,8 @@ def dstm_model(timestep=5):
 
 >   학습 결과
 <table><tr><td>
-<img src="./images/third_lstm.png" />
-</td><td><img src="./images/가중치 다르게 한 third_dstm.png" /></td></tr>
+<img src="../images/third_lstm.png" />
+</td><td><img src="../images/가중치 다르게 한 third_dstm.png" /></td></tr>
 </table>
 
 - 성능이 낮은 위치에서 기울기가 낮아지는 수렴증상을 보임
@@ -222,8 +222,8 @@ def dstm_model(timestep=5):
 >   학습결과
 <table>
 <tr>
-<td><img src="./images/D(L)STM_First.png" /></td>
-<td><img src="./images/D(L)STM second.png" /><td>
+<td><img src="../images/D(L)STM_First.png" /></td>
+<td><img src="../images/D(L)STM second.png" /><td>
 </tr>
 </table>
 
@@ -268,9 +268,9 @@ def dstm_model(timestep=5):
 >   학습 결과
 
 <table>
-<tr><td><img src="./images/RBPSTM_csi.png" /></td>
-<td><img src="./images/RBPSTM_accuracy.png" /></td>
-<td><img src="./images/RBPSTM_loss.png" /></td></tr>
+<tr><td><img src="../images/RBPSTM_csi.png" /></td>
+<td><img src="../images/RBPSTM_accuracy.png" /></td>
+<td><img src="../images/RBPSTM_loss.png" /></td></tr>
 </table>
 
 **Dense 층에 머신러닝 결과를 적용**
@@ -331,9 +331,9 @@ def dstm_model(timestep=5):
 > 학습결과
 
 <table>
-<tr><td><img src="./images/Dense_ML_first.png" /></td><td><img src="./images/Dense_ML_second_accuracy.png" /></td></tr>
-<tr><td><img src="./images/Dense_ML_first_csi.png" /></td><td><img src="./images/Dense_ML_second_csi.png" /></td></tr>
-<tr><td><img src="./images/Dense_ML_first_loss.png" /></td><td><img src="./images/Dense_ML_first_loss.png" /></td></tr>
+<tr><td><img src="../images/Dense_ML_first.png" /></td><td><img src="../images/Dense_ML_second_accuracy.png" /></td></tr>
+<tr><td><img src="../images/Dense_ML_first_csi.png" /></td><td><img src="../images/Dense_ML_second_csi.png" /></td></tr>
+<tr><td><img src="../images/Dense_ML_first_loss.png" /></td><td><img src="../images/Dense_ML_first_loss.png" /></td></tr>
 </table>
 
 - Dense 층에 머신러닝 결과를 적용하니, Validation과  Trainning CSI 점수가 안정적으로 0.1까지 올라감
@@ -389,14 +389,14 @@ def dstm_model(timestep=5):
 ```
 >   학습결과
 
-<img src="./images/D(L)STM_final.png" />
+<img src="../images/D(L)STM_final.png" />
 
 
 ### FSTM_ Fast Data LSTM Model
 - 시간당 하나의 데이터를 선별
 - 해당 시간 중 가장 dh가 작은 데이터를 사용
 
-<img src="./images/DH 영향도 확인.png" />
+<img src="../images/DH 영향도 확인.png" />
 
 DH가 작을수록 데이터의 신뢰성이 높아진다는 것을 가설로 함.
 
@@ -430,9 +430,9 @@ def dstm_model(timestep=5):
 > 학습 결과
 
 <table>
-<tr><td><img src="./images/fstm_first_accuracy.png" /></td>
-<td><img src="./images/fstm_first_csi.png" /></td>
-<td><img src="./images/fstm_first_loss.png" /></td></tr>
+<tr><td><img src="../images/fstm_first_accuracy.png" /></td>
+<td><img src="../images/fstm_first_csi.png" /></td>
+<td><img src="../images/fstm_first_loss.png" /></td></tr>
 </table>
 
 **머신러닝 결과 후처리**
@@ -465,7 +465,7 @@ def fstm_model(timestep=5):
 
 >   학습결과
 
-<img src="./images/fstm 결과.png" />
+<img src="../images/fstm 결과.png" />
 
 - 머신러닝 결과를 적용해도 학습이 잘 되지는 않음
 
@@ -504,7 +504,7 @@ def fstm_model(timestep=5):
 ```
 
 >   학습 결과
-<img src="./images/FSTM_기술지표 추가 결과.png" />
+<img src="../images/FSTM_기술지표 추가 결과.png" />
 
 - 기술 지표 추가시 데이터가 0으로 맞춰지는 현상 발생
 - 따로 기술 지표를 추가한지 않는 방향
@@ -554,7 +554,7 @@ DX = decoder_lstm(DX,initial_state=encode_state)
 DX = keras.layers.Flatten()(DX)
 ```
 >   학습 결과
-<img src="./images/tstm_result.png" />
+<img src="../images/tstm_result.png" />
 - 회귀 모델로는 전혀 학습되지 않음을 볼 수 있다.
 
 - decoder의 복잡하지 않은 모델가 회귀 데이터의 다양한 범위를 반영하지 못하는것으로 판단
