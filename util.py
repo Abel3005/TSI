@@ -41,10 +41,21 @@ def make_day2vv(df):
     tmp['rainfall_train.vv'] = StandardScaler().fit_transform(tmp[['rainfall_train.vv']])
     return tmp
 
+def make_dayhour2class(df):
+    #please make 'day' column
+    tmp = df.groupby(by=['day','rainfall_train.ef_hour'])['rainfall_train.class_interval'].mean().reset_index()
+    return tmp
+
 def make_day2class(df):
     #please make 'day' column
     tmp = df.groupby(by=['day'])['rainfall_train.class_interval'].mean().reset_index()
     return tmp
+
+def make_monthday2class(df):
+    #please make 'day' column
+    tmp = df.groupby(by=['rainfall_train.ef_month'])['rainfall_train.class_interval'].mean().reset_index()
+    return tmp
+
 def make_day2stdclass(df):
     #please make 'day' column
     tmp = df.groupby(by=['day'])['rainfall_train.class_interval'].std().reset_index()
@@ -60,6 +71,10 @@ def month_to_day(month):
     for i in range(1,13):
         month_to_day[i] += month_to_day[i-1] 
     return month_to_day[month]
+def make_dayhour_to_index(dayhour):
+    tmp = dayhour.copy()
+    tmp['index']= (dayhour['day'] *8) + (dayhour['rainfall_train.ef_hour'] //3)
+    return tmp
 
 def preprocessing_simple_train(_method="fast"):
     train_df = pd.read_csv(train_data_path)
@@ -127,7 +142,7 @@ def preprocessing_daegun(csvfile=train_data_path):
     rainfall_train = pd.read_csv(csvfile)
     rainfall_train.drop(columns=['Unnamed: 0'],inplace= True)
 
-    df = pd.concat([pd.read_csv('daegun_first.csv'),rainfall_train[['rainfall_train.dh','rainfall_train.ef_month','rainfall_train.ef_day','rainfall_train.ef_hour','rainfall_train.ef_year']]],axis=1)
+    df = pd.concat([pd.read_csv('./data/daegun_first.csv'),rainfall_train[['rainfall_train.dh','rainfall_train.ef_month','rainfall_train.ef_day','rainfall_train.ef_hour','rainfall_train.ef_year']]],axis=1)
     df = df.drop(columns=['TM_FC','TM_EF','EF_class'])
     null_df = df[df['class'] == -999]
     df = df[df['class'] != -999]

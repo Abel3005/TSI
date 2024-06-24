@@ -1,17 +1,35 @@
-## 실제 훈련 데이터와 테스트 데이터 범위가 다름
-- 지점(STN)과 연도(Year)의 범위가 다름
+## 년도, 지점별 데이터 분석 
+- 실제 훈련 데이터와 테스트 데이터 범위가 다름
+- 모델에서 지점과 년도가 얼마나 영향을 미칠지 분석
 
-> 지점별(STN)별 데이터 분포
+### 전체 데이터 분석
+
+> 평균 데이터 분석
+
+지점, 년도에 따른 강수 계급에 해당하는 값을 평균한 값을 통하여, 전체적인 경향성 분석
 
 <img src="../images/지점별 강수 계급 데이터 분포.png" />
 
 >   연도별(Year)별 데이터 분포
-
 <img src="../images/년도별 실강수량 평균 가시화.png" />
 
 - **데이터 시각화를 통해서 지점별로는 비교적 유사한 데이터 분포를 띄고, 연도별로는 비교전 다른 데이터 분포 패턴을 띄고 있음**
 
-- **지점이 아닌 연도에 대해서 데이터 분리해서 검증할 필요가 있음**
+> 박스 그림으로 분포 분석
+<table>
+<tr><td><img src="../images/지점별 데이터분포 상자그림.png" /></td><td><img src="../images/연도별 박스그림 분석.png" /></td></td>
+</table>
+
+- 무강수 데이터 분포가 80% 이상을 넘어가  정확한 데이터 분석이 어려움
+
+### 무강수 데이터 제외 분석
+
+> 박스 그림으로 데이터 분포 분석
+
+<table>
+<tr><td><img src="../images/무강수 지점별 데이터 분포 분석.png" /></td><td><img src="../images/년도별 데이터 강수데이터 분석.png" /></td></td>
+</table>
+
 
 
 
@@ -67,7 +85,6 @@ $s(i) = \frac{b(i) - a(i)}{max(a(i),b(i))}$
     - 개별 군집에서 전체 실루엣 계수가 클 수록 성능이 우수
     - 군집 내 개별 요소들의 실루엣 점수가 비슷해야지 성능이 좋다.
 
-
 ### train data 군집화
 
 <img src="../images/kmeans_cluster.png" />
@@ -75,6 +92,25 @@ $s(i) = \frac{b(i) - a(i)}{max(a(i),b(i))}$
 ### test data 군집화 
 
 <img src="../images/test_cluster_kmeans.png" />
+
+- 4개로 분포의 형태가 나눠짐을 확인
+
+
+## V_median 점수에 대한 고찰
+
+>   일자에 따라 각 년도별 평균값 비교
+
+<table>
+<tr>
+<td><img src="../images/A년도v_median 분포.png" /></td>
+<td><img src="../images/B년도v_median 분포.png" /></td>
+<td><img src="../images/C년도v_median 분포.png" /></td>
+</tr>
+</table>
+
+>   일자에 따른 C년도 각 지점별 평균값 비교
+
+<img src='../images/C년도 STN v_median 가시화.png' />
 
 
 

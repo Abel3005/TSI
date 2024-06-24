@@ -93,3 +93,13 @@ model.add(keras.layers.Dense(1, activation='sigmoid'))
 >   강수데이터에 대해서 Random Forest 성능 평가 
 <img src="../images/최적의 RandomForeset.png" />
 
+### cluster-bassd machine learning model
+- 데이터의 분포를 나눠서 머신러닝으로 분류하도록 하는 알고리즘
+
+>   프로세스
+1. 비슷한 데이터 분포를 띄는 것끼리 데이터를 나눔
+2. 나눠진 각 클러스터 마다 앙상블 모델(랜덤 포레스트 적용)
+
+### 클러스터 나누기
+- 별개의 시간과 장소에 대한 데이터만 남기도록 데이터를 전처리
+    - dh가 가장 작은 것으로 판단
