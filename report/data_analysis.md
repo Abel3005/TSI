@@ -40,12 +40,30 @@
 
 <table>
 <tr><td><img src="../images/강수무강수데이터 비교.png" /></td>
-<td><img src="../images/강수 계급별 데이터 분포.png" /> </td></tr>
+<td><img src="../images/강수데이터분포.png" /> </td></tr>
 </table>
 
 - 무강수 데이터의 개수: 약 84% 강수 데이터 개수 : 약 16%
 - 무강수 데이터를 제외한 데이터에 대해서 비교적 데이터 분포가 균형잡혀 있음
 
+### 지점별 강수 클래스 데이터 분포
+
+<img src="../images/강수데이터 지점별분포.png"/>
+
+### 년도별 강수 클래스 데이터 분포
+
+<img src="../images/강수데이터 실강수계급 년도별 분포.png"/>
+
+
+### 지점/년도별 강수 클래스 데이터 분포
+
+<img src="../images/지점년도별강수데이터분포.png" />
+
+## 월에 따른 강수 계급 분포
+
+<table>
+<tr><td><img src="../images/월에따른강수계급분포.png"/></td><td><img src="../images/강수클래스데이터.png"/></td></tr>
+</table>
 
 ## DH 영향도 확인
 
