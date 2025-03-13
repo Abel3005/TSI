@@ -80,6 +80,16 @@ V0(무강수 확률), V1-9(각 강수 계급별 확률) 중 최대 값을 가지
 
 - **dh가 낮을 수록 데이터의 신뢰도가 높아짐**
 
+### Accuracy
+
+<img src="../images/max_allprob.png" />
+
+### 조건부 결과: 강수 데이터라고 가정하였을 때
+
+<table>
+<tr><td><img src="../images/max_f1rainprob.png"/></td><td></td><td> <img src="../images/max_rainprob.png" /></td></tr>
+</table>
+
 
 
 ## 전체적인 학습 데이터 설명
