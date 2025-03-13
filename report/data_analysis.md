@@ -71,7 +71,12 @@ dh 변수가 예측 결과 값에 주는 영향도를 분석하기 위해서,
 V0(무강수 확률), V1-9(각 강수 계급별 확률) 중 최대 값을 가지는 계급을 예측 계급으로 하는 **max(V0-9)모델**을 사용.
 
 
-<img src='../images/DH 영향도 확인.png' />
+<table>
+<tr>
+<td><img src='../images/dhf1score_all.png' /></td>
+<td><img src="../images/dhf1score_rain.png" /></td>
+</tr>
+</table>
 
 - **dh가 낮을 수록 데이터의 신뢰도가 높아짐**
 
