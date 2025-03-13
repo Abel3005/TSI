@@ -87,7 +87,7 @@ V0(무강수 확률), V1-9(각 강수 계급별 확률) 중 최대 값을 가지
 ### 조건부 결과: 강수 데이터라고 가정하였을 때
 
 <table>
-<tr><td><img src="../images/max_f1rainprob.png"/></td><td></td><td> <img src="../images/max_rainprob.png" /></td></tr>
+<tr><td><img src="../images/max_f1rainprob.png"/></td><td> <img src="../images/max_rainprob.png" /></td></tr>
 </table>
 
 
