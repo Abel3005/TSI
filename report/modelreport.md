@@ -1,52 +1,46 @@
-# 모델
-
 ## 무강수/강수 분류 모델
 
-### RandomForest 무강수/강수 분류**
->   독립변수
-- DH
-- V1-9
-- hour: sin, cos
-- day: sin, cos
+### argMax 모델
+- 전체 데이터에 대해서 각 계급별 확률이 가장 높은 것으로 추정: 약 0.848
+- 종속변수에 대응되는 다수의 데이터로 보깅
+<img src="../images/argmax_vogging.png"/>
+- 0.7로 보깅시 0.863 정도로 이전보다 더 높은 확률로 추정함을 확인
 
->   종속변수
-- class : 강수계급
-- VV : 실 강수량
 
->   분류 결과
+### 랜덤포레스트 모델
+- 학습데이터 A,B,C년도에 대해서 각각 교차 검증하여 성능을 판단했다.
+- 전체 데이터에 대해서는 다음과 같은 결과가 나왓다.
+- A : 0.832, B: 0.85, C: 0.867
 
-```python
-                precision   recall    f1-score support
-
-       False       0.69      0.45      0.55     45133
-        True       0.90      0.96      0.93    244620
-
-    accuracy                           0.88    289753
-   macro avg       0.80      0.71      0.74    289753
-weighted avg       0.87      0.88      0.87    289753
-```
+**보팅 알고리즘 사용시**
+<img src="../images/voting_randomforest.png"/>
+- 0.7의 가중치를 사용할 때, 가장 좋은 성능을 보였다.
+- A: 0.872, B: 0.880, C: 0.907
 
 
 ### DNN (가중치 설정)을 통한 분류**
-```python
-from tensorflow import keras
-model = keras.Sequential()
-model.add(keras.layers.Dense(30, activation='sigmoid',input_shape=(14,)))
-model.add(keras.layers.Dense(100, activation='relu',input_shape=(35,)))
-model.add(keras.layers.Dense(20, activation='relu',input_shape=(34,)))
-model.add(keras.layers.Dense(1, activation='sigmoid'))
-```
 >   하이퍼 파라미터
 
 - optimizer : adam
-- loss_func : Cross_Entropy
+- loss_func : Binary Cross_Entropy
 
 >   결과
 
-<img src="../images/DNN 강수_무강수.png" />
+<img src="../images/dnn_강수무강수_전체.png" />
 
-- 학습 시간이 오래 걸릴 뿐만이 아니라 오래걸림.
-- DNN 보다는 머신러닝과 V0 임계값을 이용하여 데이터 분류하는 방법 사용.
+**A,B,C년도에 대해서 교차검증 결과** 
+```
+A: 84.240 
+B: 86.695 
+C: 88.737
+```
+
+**0.7 가중치 보팅**
+```
+A: 86.921
+B: 87.760
+C: 89.901
+```
 
 
 > 머신러닝 분류 결과
